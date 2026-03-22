@@ -1,0 +1,146 @@
+{
+  "trace_name": "qhpc_cache_research_workflow_demo",
+  "generated_from": "qhpc_cache.research_agents.build_demo_simulation_trace",
+  "workflow_state_snapshots": [
+    {
+      "workflow_name": "qhpc_research_day_1",
+      "active_agents": [
+        "FinanceModelAgent",
+        "RiskMetricsAgent",
+        "QuantumMappingAgent"
+      ],
+      "queued_tasks": [
+        "task-risk-002",
+        "task-cache-policy-005"
+      ],
+      "completed_tasks": [],
+      "active_events": [],
+      "notes": "Kickoff: finance + risk + quantum planning."
+    },
+    {
+      "workflow_name": "qhpc_research_day_1",
+      "active_agents": [
+        "FinanceModelAgent",
+        "RiskMetricsAgent",
+        "QuantumMappingAgent",
+        "CachePolicyAgent",
+        "LiteratureReviewAgent",
+        "ExperimentAgent",
+        "VisualizationAgent"
+      ],
+      "queued_tasks": [
+        "task-cache-policy-005",
+        "task-risk-002"
+      ],
+      "completed_tasks": [
+        "task-finance-mc-001"
+      ],
+      "active_events": [
+        "f580a71c-f1ba-4241-8d30-aee33237b921"
+      ],
+      "notes": "Finance baseline check complete; cache policy queued."
+    },
+    {
+      "workflow_name": "qhpc_research_day_1",
+      "active_agents": [
+        "VisualizationAgent",
+        "LiteratureReviewAgent"
+      ],
+      "queued_tasks": [
+        "task-risk-002"
+      ],
+      "completed_tasks": [
+        "task-finance-mc-001",
+        "task-quantum-003",
+        "task-cache-004",
+        "task-cache-policy-005",
+        "task-docs-006"
+      ],
+      "active_events": [
+        "82ffb4f7-7c6e-4ae2-bc20-79e8de3673a1",
+        "dd9c783a-2f82-4e88-9581-bd2d4f5512c1"
+      ],
+      "notes": "Trace export ready; Pixel Agents bridge is optional sidecar."
+    }
+  ],
+  "event_log": [
+    {
+      "event_identifier": "1391676c-4c69-4ea4-8ce7-5bcbe72cdf8a",
+      "agent_name": "FinanceModelAgent",
+      "event_type": "tool_simulation",
+      "event_timestamp": "2026-03-22T07:00:02.567849+00:00",
+      "task_identifier": "task-finance-mc-001",
+      "active_file_path": "jk/src/qhpc_cache/pricing.py",
+      "event_summary": "Reviewed terminal GBM loop and antithetic branch",
+      "event_details": "",
+      "status_label": "active"
+    },
+    {
+      "event_identifier": "4ab59d51-6377-484b-ac1c-293a0cec6b1b",
+      "agent_name": "RiskMetricsAgent",
+      "event_type": "tool_simulation",
+      "event_timestamp": "2026-03-22T07:00:02.568000+00:00",
+      "task_identifier": "task-risk-002",
+      "active_file_path": "jk/src/qhpc_cache/risk_metrics.py",
+      "event_summary": "Verified VaR/CVaR sample quantile docstrings",
+      "event_details": "",
+      "status_label": "active"
+    },
+    {
+      "event_identifier": "f580a71c-f1ba-4241-8d30-aee33237b921",
+      "agent_name": "QuantumMappingAgent",
+      "event_type": "planning",
+      "event_timestamp": "2026-03-22T07:00:02.568006+00:00",
+      "task_identifier": "task-quantum-003",
+      "active_file_path": "jk/src/qhpc_cache/quantum_mapping.py",
+      "event_summary": "Confirmed placeholder labels on QuantumResourceEstimate",
+      "event_details": "",
+      "status_label": "active"
+    },
+    {
+      "event_identifier": "71f81e1d-f725-4007-af04-8fd07974b23d",
+      "agent_name": "CachePolicyAgent",
+      "event_type": "experiment_design",
+      "event_timestamp": "2026-03-22T07:00:02.568012+00:00",
+      "task_identifier": "task-cache-004",
+      "active_file_path": "jk/src/qhpc_cache/circuit_similarity.py",
+      "event_summary": "Sketched finance+circuit similarity breakdown strings",
+      "event_details": "",
+      "status_label": "active"
+    },
+    {
+      "event_identifier": "97ea0687-8b9b-4a91-9622-d9f4f41d9676",
+      "agent_name": "ExperimentAgent",
+      "event_type": "batch_run",
+      "event_timestamp": "2026-03-22T07:00:02.568015+00:00",
+      "task_identifier": "task-cache-policy-005",
+      "active_file_path": "jk/src/qhpc_cache/experiment_runner.py",
+      "event_summary": "Defined run_payoff_comparison_experiment smoke path",
+      "event_details": "",
+      "status_label": "active"
+    },
+    {
+      "event_identifier": "82ffb4f7-7c6e-4ae2-bc20-79e8de3673a1",
+      "agent_name": "LiteratureReviewAgent",
+      "event_type": "mapping",
+      "event_timestamp": "2026-03-22T07:00:02.568019+00:00",
+      "task_identifier": "task-docs-006",
+      "active_file_path": "jk/docs/research_to_code_mapping.md",
+      "event_summary": "Linked modular QMCI and COS/Fourier rows to modules",
+      "event_details": "",
+      "status_label": "active"
+    },
+    {
+      "event_identifier": "dd9c783a-2f82-4e88-9581-bd2d4f5512c1",
+      "agent_name": "VisualizationAgent",
+      "event_type": "export",
+      "event_timestamp": "2026-03-22T07:00:02.568022+00:00",
+      "task_identifier": "task-docs-006",
+      "active_file_path": "jk/tools/pixel_agents_bridge/trace_exporter.py",
+      "event_summary": "Prepared JSON + JSONL export for workflow trace",
+      "event_details": "",
+      "status_label": "complete"
+    }
+  ],
+  "schema_version": "1.0"
+}

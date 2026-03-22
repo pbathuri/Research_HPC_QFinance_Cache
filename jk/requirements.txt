@@ -1,0 +1,2 @@
+# qhpc_cache core (imported via qhpc_cache/__init__.py) uses only the stdlib.
+# Optional: pip install -e ".[data-pipeline]" for Databento + pandas + Parquet (data_* modules).

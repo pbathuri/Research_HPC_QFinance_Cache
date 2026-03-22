@@ -1,0 +1,6 @@
+data/qhpc_data/
+outputs/data_ingestion_event_book/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/

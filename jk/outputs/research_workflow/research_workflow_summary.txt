@@ -1,0 +1,38 @@
+Trace: qhpc_cache_research_workflow_demo
+Generated from: qhpc_cache.research_agents.build_demo_simulation_trace
+Events: 7
+Snapshots: 3
+
+--- Workflow snapshots ---
+[1]
+Workflow: qhpc_research_day_1
+Active agents (3): FinanceModelAgent, RiskMetricsAgent, QuantumMappingAgent
+Queued tasks (2): task-risk-002, task-cache-policy-005
+Completed tasks (0): —
+Recent event ids (0): —
+Notes: Kickoff: finance + risk + quantum planning.
+
+[2]
+Workflow: qhpc_research_day_1
+Active agents (7): FinanceModelAgent, RiskMetricsAgent, QuantumMappingAgent, CachePolicyAgent, LiteratureReviewAgent, ExperimentAgent, VisualizationAgent
+Queued tasks (2): task-cache-policy-005, task-risk-002
+Completed tasks (1): task-finance-mc-001
+Recent event ids (1): f580a71c-f1ba-4241-8d30-aee33237b921
+Notes: Finance baseline check complete; cache policy queued.
+
+[3]
+Workflow: qhpc_research_day_1
+Active agents (2): VisualizationAgent, LiteratureReviewAgent
+Queued tasks (1): task-risk-002
+Completed tasks (5): task-finance-mc-001, task-quantum-003, task-cache-004, task-cache-policy-005, task-docs-006
+Recent event ids (2): 82ffb4f7-7c6e-4ae2-bc20-79e8de3673a1, dd9c783a-2f82-4e88-9581-bd2d4f5512c1
+Notes: Trace export ready; Pixel Agents bridge is optional sidecar.
+
+--- Event summaries (chronological) ---
+- 2026-03-22T07:00:02.567849+00:00 | FinanceModelAgent | tool_simulation | task-finance-mc-001 | Reviewed terminal GBM loop and antithetic branch
+- 2026-03-22T07:00:02.568000+00:00 | RiskMetricsAgent | tool_simulation | task-risk-002 | Verified VaR/CVaR sample quantile docstrings
+- 2026-03-22T07:00:02.568006+00:00 | QuantumMappingAgent | planning | task-quantum-003 | Confirmed placeholder labels on QuantumResourceEstimate
+- 2026-03-22T07:00:02.568012+00:00 | CachePolicyAgent | experiment_design | task-cache-004 | Sketched finance+circuit similarity breakdown strings
+- 2026-03-22T07:00:02.568015+00:00 | ExperimentAgent | batch_run | task-cache-policy-005 | Defined run_payoff_comparison_experiment smoke path
+- 2026-03-22T07:00:02.568019+00:00 | LiteratureReviewAgent | mapping | task-docs-006 | Linked modular QMCI and COS/Fourier rows to modules
+- 2026-03-22T07:00:02.568022+00:00 | VisualizationAgent | export | task-docs-006 | Prepared JSON + JSONL export for workflow trace

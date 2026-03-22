@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "trace_name": "sample_minimal_trace",
+  "generated_from": "tools/pixel_agents_bridge/sample_workflow_trace.json",
+  "workflow_state_snapshots": [
+    {
+      "workflow_name": "sample",
+      "active_agents": ["FinanceModelAgent"],
+      "queued_tasks": ["task-a"],
+      "completed_tasks": [],
+      "active_events": [],
+      "notes": "Static example for schema inspection."
+    }
+  ],
+  "event_log": [
+    {
+      "event_identifier": "sample-event-1",
+      "agent_name": "FinanceModelAgent",
+      "event_type": "tool_simulation",
+      "event_timestamp": "2025-01-01T12:00:00+00:00",
+      "task_identifier": "task-a",
+      "active_file_path": "jk/src/qhpc_cache/pricing.py",
+      "event_summary": "Example read of pricing module",
+      "event_details": "",
+      "status_label": "complete"
+    }
+  ]
+}

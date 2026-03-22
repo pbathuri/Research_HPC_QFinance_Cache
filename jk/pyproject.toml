@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qhpc-cache"
+version = "0.1.0"
+description = "Monte Carlo pricing and cache prototype"
+
+[project.optional-dependencies]
+# Optional: LangChain hook in tools/codex_dev/ (never imported by qhpc_cache core).
+ai-workflow = [
+  "langchain-core>=0.3.0",
+  "langgraph>=0.2.0",
+]
+# Real-data pipeline: Databento client, pandas, Parquet (qhpc_cache data_* modules).
+data-pipeline = [
+  "databento>=0.31.0",
+  "pandas>=2.0",
+  "pyarrow>=14.0",
+  "numpy>=1.24",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
