@@ -87,7 +87,8 @@ This document ties research directions (quantum finance, QMCI, caching, hybrid s
 | Local kdb-taq extraction backend | `taq_kdb_adapter.py` — `run_q_event_window_extraction`, `inspect_kdb_taq_repo` |
 | Event windows + hybrid kdb → flat fallback | `event_book.py` — `extract_event_windows_from_taq` |
 | Dataset registry & checkpoints | `data_registry.py` |
-| Treasury file vs fallback | `rates_data.py`, `data_ingestion.py` — `load_or_ingest_rates_data` |
+| Treasury: WRDS priority → file → flat | `rates_data.py` — `load_risk_free_rate_series_priority`, `load_pluggable_risk_free_rate_series` |
+| WRDS pull + registry | `wrds_provider.py`, `wrds_registry.py`, `wrds_queries.py` |
 
 ## Research memory (non-RAG)
 
@@ -95,19 +96,26 @@ This document ties research directions (quantum finance, QMCI, caching, hybrid s
 |------|----------------|
 | Critical concept window | `knowledge_cache.py` — `CriticalConcept`, `get_critical_cache_window` |
 | Document anchors + bundle for exports | `research_memory.py` — `register_document_anchor`, `critical_window_with_modules` |
+| Data-source anchors (Databento / kdb / WRDS) | `research_memory.py` — `register_data_source_anchor`, `seed_default_data_source_anchors` |
 | Book/paper → module index (narrative) | `docs/book_to_module_mapping.md` |
 
-## WRDS / CRSP (future only)
+## WRDS / CRSP (active enrichment)
 
 | Idea | Code location |
 |------|----------------|
-| Roadmap + access placeholder | `wrds_placeholder.py`, `docs/wrds_future_integration_plan.md` |
+| Connection + discovery + SQL | `wrds_provider.py` — `check_wrds_connection`, `discover_wrds_dataset_access`, `run_wrds_sql_query` |
+| Loaders (Treasury, master, events, links, FF) | `wrds_provider.py`, `wrds_queries.py` |
+| Save + `data_registry` | `wrds_registry.py` — `save_wrds_dataset`, `register_wrds_dataset`, `pull_and_register_crsp_treasury` |
+| Legacy roadmap types | `wrds_placeholder.py` (synced from `wrds_queries`) |
+| Operator doc | `docs/wrds_active_integration.md` |
 
 ## Workflow instrumentation
 
 | Idea | Code location |
 |------|----------------|
-| Data-phase Pixel JSONL | `workflow_events.py`, `run_data_ingestion_event_book_demo.py`, `tools/pixel_agents_bridge/pixel_trace_exporter.py` |
+| Metrics CSV sinks | `metrics_sink.py` — runtime, cache, **workload_cache_observations**, agent, experiment |
+| Workload ↔ cache mapping | `cache_workload_mapping.py`, `workload_signatures.py`, `cache_metrics.flush_workload_observation` |
+| Orchestrated pipeline | `orchestrator.py`, `run_full_research_pipeline.py` |
 
 ## Historical analytics (returns, risk, alpha)
 

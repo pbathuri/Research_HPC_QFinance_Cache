@@ -106,11 +106,13 @@ def main() -> int:
         n_kdb = _count_taq_like_files(Path(kdb_repo).expanduser())
         ok.append(f"taq-like files under kdb-taq tree (approx): {n_kdb}")
 
-    pixel = Path("/Users/prady/Desktop/pixel-agents")
+    pixel = Path(os.environ.get("QHPC_PIXEL_REPO", "/Users/prady/Desktop/pixel-agents")).expanduser()
     if pixel.is_dir():
-        ok.append(f"Pixel Agents repo present: {pixel}")
+        ok.append(f"Optional Pixel Agents repo present: {pixel}")
     else:
-        issues.append("Optional: Pixel Agents repo not at ~/Desktop/pixel-agents (bridge still exports JSONL here)")
+        ok.append(
+            "Optional: no Pixel Agents repo at QHPC_PIXEL_REPO (research spine uses matplotlib/CSV; see docs/repo_simplification_plan.md)"
+        )
 
     crsp = os.environ.get("QHPC_CRSP_TREASURY_PATH", "").strip()
     if crsp:

@@ -32,7 +32,6 @@ from qhpc_cache.data_sources import NyseTaqFileProvider
 DEFAULT_KDB_TAQ_PATHS = (
     "/Users/prady/Desktop/kdb-taq",
     "/Users/prady/desktop/kdb-taq",
-    "/Users/prady/Desktop/kdb-taq",
 )
 
 

@@ -1,149 +1,197 @@
-# qhpc_cache — Monte Carlo finance, risk, and quantum/circuit scaffolding
+# qhpc_cache prototype
 
-**Finance-valid research baseline** (undergraduate-oriented): the classical stack is
-implementations you can cite in a methods section—GBM, payoffs, Black–Scholes checks,
-Monte Carlo with optional variance reduction, sample VaR/CVaR, and a small
-portfolio layer—not pseudocode. **Quantum and heavy circuit paths** are clearly
-labeled **placeholders** (planning objects, illustrative qubit/depth counts, string
-stubs for compiled circuits). The core package stays **standard-library-only**.
+Compact prototype for:
 
-## Research motivation
+- classical Monte Carlo option pricing
+- exact-match in-memory cache reuse
+- heuristic and AI-assisted cache policy stubs
+- lightweight experiment runner baselines
 
-The project supports a workflow that connects:
+This repository currently supports **prototype cache experiments**, not a
+production cache controller or hardware-level cache validation.
 
-- **Teaching-oriented** risk-neutral Monte Carlo pricing and **sample-based** VaR/CVaR (scenario P&L quantiles—not a regulatory internal model).
-- **Variance reduction** (antithetic paths, control variates) and comparison to **Black–Scholes**.
-- **Semi-analytic** COS pricing under GBM for validation and method comparison.
-- **Quantum finance mapping** as *documentation and data structures* for future QMCI / amplitude-estimation work—**not** claims of speedup.
-- **Circuit-aware caching** (exact keys + transparent similarity) aligned with proposals about reuse, compression, and hybrid stacks.
+## Implemented now
 
-Heavy frameworks (LangChain, agent swarms, Lean, AutoResearchClaw, etc.) are **not** imported by the core package. **Optional** extras exist for advanced tooling: install `pip install -e ".[ai-workflow]"` only if you use `tools/codex_dev/optional_langchain_hook.py` to connect Codex-shaped steps to LangChain/LangGraph. For **historical market data ingestion** (Databento, pandas, Parquet), use `pip install -e ".[data-pipeline]"` (see `docs/data_source_setup.md`).
+- `src/qhpc_cache/pricing.py`
+  - GBM Monte Carlo pricing (European, digital, Asian)
+  - optional antithetic variates and control variate
+  - seeded reproducibility (`random_seed`)
+  - lightweight timing instrumentation
+- `src/qhpc_cache/cache_store.py`
+  - exact-match in-memory cache
+  - diagnostics: hits, misses, entries, lookup/put/overwrite counts, rates
+- `src/qhpc_cache/cache_policy.py`
+  - heuristic and logistic policy stubs
+  - AI-assisted stub with explicit fallback modes and diagnostics counters
+- `src/qhpc_cache/experiment_runner.py`
+  - repeated-pricing summaries
+  - policy comparison helper
+  - canonical exact-match cache baseline experiment
+  - similarity-cache replay experiment with measured error vs no-cache baseline
+- `src/qhpc_cache/feature_builder.py`
+  - active cache-key feature construction including full pricing inputs
 
-The **Codex CLI** (if on your `PATH`) is supported as a **development copilot**—planning, review prep, audits—not as a library inside `qhpc_cache`. See `docs/codex_development.md`, `tools/codex_dev/`, and `docs/dependency_decisions.md`. Other local research paths are summarized in `docs/local_resource_audit.md`.
+## Experimental / placeholder only
 
-**Historical data phase (constraints, checkpoints, budgets):** see `docs/phase_master_plan.md` and `docs/local_resource_usage_in_data_phase.md`.
+- `placeholders.py`: circuit metadata placeholders
+- `fourier_placeholder.py`: research benchmark hooks (not an HPC engine)
+- similarity-aware cache logic in active `MonteCarloPricer.price_option`: **not implemented**
+- similarity reuse is available as an explicit replay experiment only
+- PMU/x86 cache-counter validation: **not implemented**
+- BigRed200 execution: **not implemented**
+- real quantum backend execution: **not implemented**
 
-## What is implemented vs placeholder
+## Canonical exact-match cache experiment
 
-| Area | Status |
-|------|--------|
-| GBM terminal and path simulation | **Implemented** (`market_models.py`) |
-| European / Asian / digital payoffs | **Implemented** (`payoffs.py`) |
-| Black–Scholes prices & Greeks | **Implemented** (`analytic_pricing.py`) |
-| Monte Carlo + `MonteCarloPricingResult` (`payoff_name`, `used_path_simulation`, …) | **Implemented** (`pricing.py`) |
-| Antithetic & control variate (European) | **Implemented** |
-| Sample VaR / CVaR / P&L summaries | **Implemented** (`risk_metrics.py`; scenario quantiles, not parametric VaR) |
-| Small portfolio types | **Implemented** (`portfolio.py`) |
-| COS / Fourier benchmark (quadrature; cross-check vs BS) | **Implemented** (`fourier_placeholder.py` — real formulas, not a stub) |
-| Quantum mapping dataclasses & workflow | **Implemented** (abstraction only; **placeholder** resource numbers) |
-| Circuit cache + similarity scores | **Implemented** (in-memory, explainable) |
-| Heuristic / logistic / AI-placeholder policies | **Implemented** (`cache_policy.py`) |
-| Experiments + reporting | **Implemented** |
-| Multi-agent workflow **simulation** + optional Pixel Agents bridge | **Implemented** (`research_agents.py`, `tools/pixel_agents_bridge/`; not a live LLM swarm) |
-| Real-data ingestion (Databento, local TAQ windows, pluggable Treasury) + registry | **Implemented** (`data_*`, `universe_builder`, `event_book`, `rates_data`, `historical_*`, `universe_analysis`; requires `pip install -e ".[data-pipeline]"`) |
-| Real quantum execution, learned cache models | **Not implemented** |
-| Distributed HPC / CUDA / Slurm | **Out of scope** |
+See:
 
-## Repository layout
+- `docs/exact_match_cache_experiment.md`
 
+Run:
+
+```python
+from qhpc_cache.experiment_runner import run_canonical_exact_match_cache_experiment
+
+summary = run_canonical_exact_match_cache_experiment(
+    num_trials=12,
+    random_seed=123,
+    output_csv_path="outputs/exact_match_cache_results.csv",
+)
 ```
-jk/
-├── docs/                    # Audits, mapping, architecture, research prompts
-├── src/qhpc_cache/          # Core package (canonical API)
-├── tests/                   # unittest suite
-├── tools/research_agent/    # Optional doc indexer (not imported by core)
-├── tools/codex_dev/         # Optional Codex CLI helpers + LangChain hook
-├── tools/pixel_agents_bridge/  # Optional: export traces → JSON/JSONL (+ Claude-shaped shim)
-├── tools/kdb_bridge/           # Notes for kdb-taq ↔ Python spec contract
-├── scripts/                 # check_data_env.py, bootstrap_data_phase.py
-├── data/qhpc_data/          # Default QHPC_DATA_ROOT (created by bootstrap; gitignored)
-├── outputs/research_workflow/    # Generated by run_research_workflow_demo.py
-├── outputs/data_ingestion_event_book/  # Data-phase Pixel-style traces + manifest
-├── run_demo.py              # Canonical demo (source of truth for this phase)
-├── run_research_workflow_demo.py  # Multi-role workflow simulation + trace export
-├── run_data_ingestion_event_book_demo.py  # Real-data pipeline demo + checkpoints
-├── monte_carlo_cache_baseline.py  # Legacy single-file European sketch (see file header)
-├── monte_FSS.py                   # Optional Fourier animation (NumPy/Matplotlib; not the core package)
-├── pyproject.toml
-└── requirements.txt         # Core: stdlib only
+
+This compares:
+
+1. no-cache baseline
+2. exact cache without policy gate
+3. heuristic policy + cache
+4. AI-assisted stub policy + cache
+
+Policy fallback usage is explicit in experiment outputs:
+
+- `policy_diagnostics.fallback_used_count`
+- `policy_diagnostics.fallback_no_model_count`
+- `policy_diagnostics.fallback_inference_error_count`
+
+All canonical experiment outputs now include execution-evidence status fields:
+
+- `execution_status`
+- `evidence_valid`
+- `excluded_from_summary`
+- `exclusion_reason`
+
+Headline summaries are computed from valid evidence only.
+
+Weak/failed branches now emit structured forensic diagnostics (JSON manifest
+fields), including triggers such as:
+
+- `zero_cache_hits`
+- `zero_similarity_hits`
+- `all_misses`
+- `empty_timing_benefit_vs_no_cache`
+- `excluded_from_valid_evidence`
+
+Forensic payloads include cache stats, top repeated keys, scale/config context,
+and exclusion reasons.
+
+## Canonical similarity-cache replay experiment
+
+This is a measurable local experiment (not a hidden fallback path). It replays a
+mixed repeated workload family and compares:
+
+1. `no_cache`
+2. `exact_cache`
+3. `similarity_cache` (threshold-gated near-match reuse)
+
+```python
+from qhpc_cache.experiment_runner import run_similarity_cache_replay_experiment
+
+summary = run_similarity_cache_replay_experiment(
+    num_requests=60,
+    similarity_threshold=0.92,
+    random_seed=777,
+    output_csv_path="outputs/similarity_cache_replay_results.csv",
+    output_manifest_path="outputs/similarity_cache_replay_manifest.json",
+    fail_on_low_similarity_quality=True,
+    max_mean_abs_error=0.75,
+)
 ```
+
+Returned metrics include:
+
+- `cache_hits`, `similarity_hits`, `cache_misses`
+- `mean_abs_error_vs_no_cache`, `p95_abs_error_vs_no_cache`
+- `total_runtime_ms`, `average_runtime_per_request_ms`
+- `execution_status`, `evidence_valid`, `excluded_from_summary`, `exclusion_reason`
+
+## Long-run local scales and resumability
+
+Major experiment families support explicit scale labels:
+
+- `smoke`: correctness check only
+- `standard`: meaningful local evidence
+- `heavy`: aggressive local run (long duration expected)
+
+Families with scale support:
+
+- `run_repeated_pricing_experiment(...)`
+- `run_canonical_exact_match_cache_experiment(...)`
+- `run_cache_policy_comparison_experiment(...)`
+- `run_similarity_cache_replay_experiment(...)`
+
+Long runs support incremental progress/checkpoint writing through:
+
+- `progress_jsonl_path`
+- `checkpoint_json_path`
+
+Heavy local sweep orchestrator:
+
+```python
+from qhpc_cache.experiment_runner import run_local_research_sweep
+
+manifest = run_local_research_sweep(
+    output_dir="outputs/long_runs",
+    scale_label="heavy",
+    resume_from_checkpoint=True,
+)
+```
+
+Tier-aware execution (default runs Tier 1 + Tier 2):
+
+```python
+manifest = run_local_research_sweep(
+    output_dir="outputs/long_runs_tier1",
+    scale_label="standard",
+    tiers_to_run=[1],  # run only correctness-critical core evidence
+)
+```
+
+Tier definitions and ownership now live in `docs/long_run_local_research.md`.
 
 ## Install and run
 
-From the `jk/` directory:
+From `jk/`:
 
 ```bash
 pip install -e .
 python3 run_demo.py
 ```
 
-**Canonical demo:** `run_demo.py` is the intended undergraduate walkthrough for the classical baseline. Path counts and seeds for that script are centralized in `qhpc_cache.config.DemoRunDefaults` (`get_demo_run_defaults()`), so you can tune the demo without editing the narrative sections.
-
-**Research workflow visualization (optional):** models seven named roles (finance, risk, quantum planning, cache, literature, experiments, visualization) and exports JSON/JSONL under `outputs/research_workflow/`. This supports reasoning about **who works on what** alongside the real codebase. It does **not** add Pixel Agents as a Python dependency; live Pixel Agents still uses Claude Code in VS Code (see `docs/pixel_agents_audit.md`).
-
-```bash
-PYTHONPATH=src python3 run_research_workflow_demo.py
-```
-
-**Real historical data pipeline (optional):** checkpointed Databento daily OHLCV (or labeled synthetic fallback), local TAQ-style event windows, pluggable Treasury CSV, registry on disk, summary analytics, and Pixel-shaped workflow JSONL. Requires `pip install -e ".[data-pipeline]"`, `export DATABENTO_API_KEY=...` for live pulls, and optionally `QHPC_TAQ_ROOT` / `QHPC_CRSP_TREASURY_PATH`. Bootstrap directories first:
-
-```bash
-pip install -e ".[data-pipeline]"
-python3 scripts/bootstrap_data_phase.py
-python3 scripts/check_data_env.py
-PYTHONPATH=src python3 run_data_ingestion_event_book_demo.py
-```
-
-Run tests (from `jk/`; `unittest` only, no pytest required):
+Run tests:
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-Tests are grouped by module under `tests/test_*.py` (pricing, payoffs, GBM, VaR/CVaR, portfolio, cache, Fourier, quantum-shaped types, experiments, config defaults, research workflow, pixel bridge, **data pipeline**).
+## Key docs for this prototype phase
 
-Optional doc index (stdlib only):
+- `docs/prototype_stabilization_audit.md`
+- `docs/exact_match_cache_experiment.md`
+- `docs/similarity_cache_replay_experiment.md`
+- `docs/similarity_cache_future_steps.md`
+- `docs/long_run_local_research.md`
 
-```bash
-python3 tools/research_agent/summarize_docs.py
-```
+## Scope disclaimer
 
-Optional Codex (must be on `PATH`; does not modify the package):
-
-```bash
-python3 tools/codex_dev/invoke_codex.py --dry-run
-python3 tools/codex_dev/invoke_codex.py --prompt "Summarize tests/ coverage themes in one paragraph."
-```
-
-## Documentation map
-
-- `docs/current_state_audit.md` — what works, placeholders, and deferred work (living snapshot).
-- `docs/next_phase_scope.md` — classical baseline phase boundaries.
-- `docs/finance_baseline_architecture.md` — how market/payoff/analytic/MC/variance/risk/portfolio layers connect.
-- `docs/research_to_code_mapping.md` — themes ↔ modules.
-- `docs/build_plan.md` — phased implementation order.
-- `docs/local_resource_audit.md` — Desktop research repos (reference levels).
-- `docs/dependency_decisions.md` — why core stays lightweight.
-- `docs/architecture_overview.md` — layers and extension points.
-- `docs/research_questions.md` — prompts for student research.
-- `docs/future_extensions.md` — ideas explicitly not built yet.
-- `docs/codex_development.md` — using the Codex CLI and optional LangChain bridge.
-- `docs/pixel_agents_audit.md` — local Pixel Agents repo inspection (Claude JSONL contract).
-- `docs/pixel_agents_integration_decision.md` — event-trace bridge strategy.
-- `docs/local_resource_to_agent_mapping.md` — Desktop repos ↔ modeled agent roles.
-- `docs/multiagent_visualization_workflow.md` — how simulation + Pixel Agents fit together.
-- `docs/data_ingestion_event_book_audit.md` — real-data phase audit.
-- `docs/data_source_setup.md` — Databento / TAQ / CRSP env vars and setup.
-- `docs/event_book_design.md` — stress library vs daily universe.
-- `docs/manual_setup_steps.md` — where to place licensed files.
-- `docs/broad_universe_design.md` — batching, budgets, Databento strategy.
-- `docs/high_risk_event_book_workflow.md` — TAQ event-book workflow.
-- `docs/rates_layer_strategy.md` — Treasury vs fallback.
-- `docs/pixel_data_phase_visualization.md` — data-phase Pixel exports.
-- `docs/book_to_module_mapping.md` — readings ↔ modules (working index).
-- `docs/critical_cache_window.md` — structured concept layer (non-RAG).
-- `docs/wrds_future_integration_plan.md` — WRDS/CRSP roadmap (placeholder).
-
-## Disclaimer
-
-Educational code only—not investment advice, not production trading software, and **no** assertion of quantum advantage.
+This prototype is for scientific software baselines and reproducible cache
+experiments. It does not claim completed similarity caching, PMU validation, HPC
+execution, or quantum advantage.

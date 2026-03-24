@@ -11,7 +11,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(ROOT / "tools" / "pixel_agents_bridge"))
 
 try:
     import pandas as pd
@@ -37,8 +36,6 @@ from qhpc_cache.data_sources import NyseTaqFileProvider
 from qhpc_cache.historical_returns import compute_log_returns
 from qhpc_cache.historical_risk import compute_historical_var, compute_event_window_drawdown
 from qhpc_cache.workflow_events import WorkflowEvent, workflow_event_now, WorkflowStage
-
-import pixel_mapping
 
 
 @unittest.skipIf(pd is None, "pandas not installed")
@@ -168,7 +165,7 @@ class TestWorkflowEventSerialization(unittest.TestCase):
         data = event.to_dict()
         self.assertEqual(data["event_type"], "broad_universe_download_started")
 
-    def test_pixel_mapping_shape(self):
+    def test_event_dict_has_type(self):
         event = WorkflowEvent(
             event_identifier="x",
             stage_name="broad_universe",
@@ -181,9 +178,8 @@ class TestWorkflowEventSerialization(unittest.TestCase):
             details="",
             status_label="ok",
         )
-        row = pixel_mapping.workflow_event_to_pixel_row(event)
-        self.assertEqual(row["type"], "assistant")
-        self.assertIn("_qhpc_data_phase", row)
+        data = event.to_dict()
+        self.assertEqual(data["event_type"], "test")
 
 
 @unittest.skipIf(pd is None, "pandas not installed")

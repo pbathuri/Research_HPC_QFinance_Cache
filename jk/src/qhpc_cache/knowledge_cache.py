@@ -137,6 +137,30 @@ BUILT_IN_CRITICAL_CONCEPTS: Tuple[CriticalConcept, ...] = (
         _t("HPC + quantum roadmaps"),
         _t("Ignoring classical I/O bottleneck in speedup claims"),
     ),
+    CriticalConcept(
+        "wrds_001",
+        "wrds_crsp_enrichment",
+        "WRDS/CRSP is enrichment over Databento + kdb: Treasury, security master, links—register every pull in data_registry.",
+        _t("wrds_provider.py", "wrds_registry.py", "wrds_queries.py"),
+        _t("WRDS schema finder", "CRSP documentation"),
+        _t("Treating WRDS as a second primary OHLCV bulk vendor without cost model"),
+    ),
+    CriticalConcept(
+        "rates_001",
+        "rates_source_priority",
+        "Risk-free path must be tiered: institutional WRDS Treasury → secondary FRB → file → explicit flat fallback.",
+        _t("rates_data.py", "docs/rates_source_priority.md"),
+        _t("CRSP Treasury reference"),
+        _t("Labeling teaching flat series as CRSP"),
+    ),
+    CriticalConcept(
+        "wload_001",
+        "workload_cache_observability",
+        "Cache metrics should tag workload families (portfolio/model/stage) for repeated MC, condensation, event windows.",
+        _t("cache_workload_mapping.py", "workload_signatures.py", "metrics_sink.py"),
+        _t("Stack-distance / locality literature"),
+        _t("Aggregating all workloads into one hit-rate without stratification"),
+    ),
 )
 
 

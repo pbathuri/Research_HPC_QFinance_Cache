@@ -92,6 +92,17 @@ class DatabentoProvider(BaseHistoricalDataProvider):
             "estimated_runtime_seconds": runtime_seconds,
         }
 
+    def verify_api_connectivity(self) -> Dict[str, Any]:
+        """Quick connectivity probe: authenticate and list a small metadata call."""
+        if not self.api_key_present():
+            return {"ok": False, "error": "DATABENTO_API_KEY not set"}
+        try:
+            client = self._client()
+            meta = client.metadata.list_datasets()
+            return {"ok": True, "datasets_available": len(meta) if meta else 0}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
     @staticmethod
     def validate_databento_response(frame: "pd.DataFrame", *, min_rows: int = 0) -> bool:
         if pd is None or frame is None:

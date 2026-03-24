@@ -1,9 +1,17 @@
-"""WRDS / CRSP future layer — placeholders only; pipeline runs without institutional login."""
+"""WRDS / CRSP — backward-compatible roadmap types.
+
+**Active integration** lives in ``wrds_provider.py``, ``wrds_queries.py``, ``wrds_registry.py``.
+Use ``wrds_queries.WRDS_INTEGRATION_ROADMAP`` for the canonical ordered slot list.
+
+This module keeps legacy ``WrdsDatasetPlaceholder`` names for older imports.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Tuple
+
+from qhpc_cache.wrds_queries import WRDS_INTEGRATION_ROADMAP as _NEW_ROADMAP
 
 
 WRDS_ACCESS_PENDING = "pending"
@@ -13,7 +21,7 @@ WRDS_ACCESS_UNAVAILABLE = "unavailable"
 
 @dataclass
 class WrdsDatasetPlaceholder:
-    """Named future dataset slot (no live connection)."""
+    """Named dataset slot (legacy mirror of ``WrdsDatasetSlot``)."""
 
     slot_id: str
     description: str
@@ -21,51 +29,15 @@ class WrdsDatasetPlaceholder:
     vendor_tags: Tuple[str, ...] = field(default_factory=tuple)
 
 
-# Priority order from governing spec (1 = highest).
-WRDS_INTEGRATION_ROADMAP: Tuple[WrdsDatasetPlaceholder, ...] = (
-    WrdsDatasetPlaceholder(
-        "crsp_treasury_inflation",
-        "CRSP Treasury / Index Treasury and Inflation",
-        1,
-        ("CRSP", "Treasury"),
-    ),
-    WrdsDatasetPlaceholder(
-        "taq_crsp_link",
-        "TAQ CRSP Link / Daily TAQ CRSP Link",
-        2,
-        ("TAQ", "CRSP", "link"),
-    ),
-    WrdsDatasetPlaceholder(
-        "crsp_stock_security_events",
-        "CRSP Stock security files and corporate events",
-        3,
-        ("CRSP", "Securities", "Events"),
-    ),
-    WrdsDatasetPlaceholder(
-        "crsp_compustat_merged",
-        "CRSP / Compustat merged fundamentals",
-        4,
-        ("Compustat",),
-    ),
-    WrdsDatasetPlaceholder(
-        "fama_french_liquidity",
-        "Fama-French and liquidity style factors",
-        5,
-        ("FF", "Factors"),
-    ),
-    WrdsDatasetPlaceholder(
-        "wrds_intraday_indicators",
-        "WRDS intraday indicators",
-        6,
-        ("WRDS", "Intraday"),
-    ),
-    WrdsDatasetPlaceholder(
-        "event_study_eventus",
-        "Event study / Eventus tooling",
-        7,
-        ("Eventus",),
-    ),
-)
+def _slots_to_placeholders() -> Tuple[WrdsDatasetPlaceholder, ...]:
+    return tuple(
+        WrdsDatasetPlaceholder(s.slot_id, s.description, s.priority_rank, s.vendor_tags)
+        for s in _NEW_ROADMAP
+    )
+
+
+# Priority order from governing spec (1 = highest) — synced with ``wrds_queries``.
+WRDS_INTEGRATION_ROADMAP: Tuple[WrdsDatasetPlaceholder, ...] = _slots_to_placeholders()
 
 
 @dataclass
@@ -73,7 +45,7 @@ class WrdsIntegrationState:
     """Serializable status for docs and future auth wiring."""
 
     access_status: str = WRDS_ACCESS_PENDING
-    account_notes: str = "WRDS access expected within days; not required for current pipeline."
+    account_notes: str = "Use wrds_provider.check_wrds_connection() when WRDS_USERNAME is set."
     roadmap: Tuple[WrdsDatasetPlaceholder, ...] = WRDS_INTEGRATION_ROADMAP
 
     def to_dict(self) -> Dict[str, Any]:

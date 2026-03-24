@@ -1,5 +1,9 @@
 # Phase master plan — historical research substrate
 
+> Historical planning note: this document captures an earlier phase plan. For the
+> current canonical operator and spine story, prefer `docs/core_research_spine.md`
+> and `docs/operator_entrypoints.md`.
+
 This plan governs the **historical data + workload + analytics** phase for `qhpc_cache` (run from `jk/`). It aligns with undergraduate research goals: honest scope, resumable pipelines, and clear placeholders for WRDS/CRSP and future quantum/cache work.
 
 ## Hard constraints (laptop phase)
@@ -15,13 +19,13 @@ This plan governs the **historical data + workload + analytics** phase for `qhpc
 
 1. Environment + registry bootstrap (`scripts/check_data_env.py`, `scripts/bootstrap_data_phase.py`).
 2. Data models, storage paths, JSON registry (`data_models.py`, `data_storage.py`, `data_registry.py`).
-3. Providers: Databento (daily OHLCV + reference), NYSE TAQ + kdb/q adapter, rates (flat + optional CRSP files), WRDS placeholders.
+3. Providers: Databento (daily OHLCV + reference), NYSE TAQ + kdb/q adapter, canonical WRDS / CRSP loaders, rates layer.
 4. Broad daily universe: deterministic batches, immediate disk flush, registry rows per batch (`universe_builder.py`, `data_ingestion.py`).
 5. High-risk event book: prioritized catalog (`event_definitions.py`, `event_book.py`), TAQ extraction hooks, manifest + queries.
-6. Rates / discounting context (`rates_data.py`, `wrds_placeholder.py`).
+6. Rates / discounting context (`rates_data.py`, `wrds_provider.py`, `wrds_registry.py`).
 7. Analytics: returns, risk, universe + event summaries, alpha features + evaluation (`historical_returns.py`, `historical_risk.py`, `universe_analysis.py`, `alpha_features.py`, `alpha_evaluation.py`).
 8. Knowledge cache + research memory (`knowledge_cache.py`, `research_memory.py`).
-9. Workflow events + Pixel bridge (`workflow_events.py`, `tools/pixel_agents_bridge/`, `run_data_ingestion_event_book_demo.py`).
+9. Workflow events + JSON audit outputs (`workflow_events.py`, `run_data_ingestion_event_book_demo.py`).
 10. Tests (pure logic; no live network in default suite).
 11. Documentation polish (`README.md`, design docs under `docs/`).
 
@@ -61,18 +65,17 @@ Granular **workflow events** (JSONL traces) use types such as `broad_universe_ba
 ## Rates strategy
 
 - **Now**: flat risk-free curve or simple CSV fallback; clearly labeled in summaries.
-- **Future**: optional local CRSP/WRSP Treasury files via pluggable loader (`rates_data.py`); `wrds_placeholder.py` documents integration order.
+- **Institutional path**: canonical WRDS CRSP Treasury loaders in `wrds_provider.py`; `rates_data.py` handles priority ordering and fallbacks.
 
 ## Research-cache strategy
 
 - Structured **concept window** in `knowledge_cache.py` (not a RAG stack): books/papers themes → module pointers.
 - `research_memory.py` for optional document anchors.
-- Export JSON for reports and Pixel traces.
+- Export JSON / markdown for reports and audit traces.
 
 ## Visualization strategy
 
-- **Pixel Agents**: optional; trace export only (`tools/pixel_agents_bridge/`). Core package does not import Pixel runtime.
-- Demos write JSONL/JSON under `outputs/`.
+- Optional workflow traces are JSON / JSONL under `outputs/`; Pixel is not part of the canonical critical path.
 
 ## Deferred / out of scope
 

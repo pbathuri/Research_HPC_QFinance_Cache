@@ -1,44 +1,67 @@
-# Architecture overview
+# Architecture Overview
 
-For the **classical finance baseline** only (GBM → payoffs → analytic → Monte Carlo → variance → risk → portfolio), read **`finance_baseline_architecture.md`** first. This document summarizes the **entire** research scaffold, including Fourier, quantum-shaped types, circuit cache, and experiments.
+## Layered Design
 
-## Layering (research workflow)
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Orchestration Layer                                             │
+│  orchestrator.py (LangGraph-style state machine)                │
+│  run_full_research_pipeline.py                                   │
+├─────────────────────────────────────────────────────────────────┤
+│  Agent Roles                                                     │
+│  EnvironmentAgent │ DataIngestionAgent │ CacheResearchAgent      │
+│  LiteratureReviewAgent │ ExperimentAgent │ VisualizationAgent    │
+│  ReportAgent │ QuantumPlanningAgent                              │
+├─────────────────────────────────────────────────────────────────┤
+│  Metrics / Observability                                         │
+│  metrics_sink.py (CSV) │ workflow_events.py │ cache_metrics.py   │
+├─────────────────────────────────────────────────────────────────┤
+│  Research Extensions                                             │
+│  literature_agent.py │ research_memory.py │ knowledge_cache.py   │
+├─────────────────────────────────────────────────────────────────┤
+│  Visualization                                                   │
+│  visualization/ (market, microstructure, alpha, simulation,      │
+│                  cache_dashboard, workflow_timeline, throughput)  │
+├─────────────────────────────────────────────────────────────────┤
+│  Data Layer                                                      │
+│  data_ingestion │ data_sources │ data_storage │ data_registry    │
+│  event_book │ taq_kdb_adapter │ rates_data │ universe_builder    │
+├─────────────────────────────────────────────────────────────────┤
+│  Cache Research Layer                                            │
+│  cache_store │ cache_metrics │ cache_policy │ circuit_cache      │
+│  circuit_similarity │ cache_policy_features                      │
+├─────────────────────────────────────────────────────────────────┤
+│  Quantum / Circuit Planning                                      │
+│  quantum_mapping │ quantum_workflow │ placeholders               │
+├─────────────────────────────────────────────────────────────────┤
+│  Classical Finance Core                                          │
+│  pricing │ analytic_pricing │ market_models │ payoffs            │
+│  variance_reduction │ risk_metrics │ portfolio                   │
+│  historical_returns │ historical_risk │ alpha_features           │
+├─────────────────────────────────────────────────────────────────┤
+│  Backend Interfaces                                              │
+│  cpu_local (implemented) │ cuda_placeholder │ mpi_placeholder    │
+│  slurm_bigred200 (template generation)                           │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-1. **Market + payoffs** — `market_models.py`, `payoffs.py`  
-   GBM simulation and explicit payoff formulas (terminal vs path).
+## Key Principles
 
-2. **Analytic reference** — `analytic_pricing.py`  
-   Black–Scholes prices and Greeks (European vanilla, no dividends).
+1. **Local-first**: all core workflows run on a laptop without network access.
+2. **Graceful degradation**: missing API keys, kdb, or packages are detected and handled.
+3. **Mathematical honesty**: no fake quantum speedup claims; clear labels for what is classical, what is planning, what is scaffold.
+4. **CSV-backed metrics**: every stage writes to append-only CSV for continuous tracking.
+5. **Structured events**: all stages emit `WorkflowEvent` objects for JSON audit / reporting outputs.
+6. **Backend-agnostic**: the same experiment can run on CPU today and GPU/MPI/Slurm later through the backend interface.
 
-3. **Monte Carlo engine** — `pricing.py`, `variance_reduction.py`  
-   `MonteCarloPricer` produces `MonteCarloPricingResult` with optional antithetic sampling, control variate (terminal spot), and analytic comparison.
+## Entry Points
 
-4. **Risk + portfolio** — `risk_metrics.py`, `portfolio.py`  
-   Sample VaR/CVaR and small multi-line books.
-
-5. **Semi-analytic bridge** — `fourier_placeholder.py`  
-   Characteristic function of log-spot and COS-style pricing with auditable quadrature for cosine coefficients; matches Black–Scholes for ATM checks.
-
-6. **Quantum-shaped planning** — `quantum_mapping.py`, `quantum_workflow.py`  
-   Dataclasses that describe finance problems as estimation/circuit tasks **without** executing quantum code.
-
-7. **Circuit cache + similarity** — `circuit_cache.py`, `circuit_similarity.py`  
-   Exact keys over structured requests; weighted, explainable similarity.
-
-8. **Policies + classical cache** — `cache_policy.py`, `cache_policy_features.py`, `cache_store.py`  
-   Heuristic, logistic, and AI-placeholder policies; JSON-keyed `SimpleCacheStore` for Monte Carlo result reuse.
-
-9. **Experiments + reporting** — `experiment_configs.py`, `research_scenarios.py`, `experiment_runner.py`, `reporting.py`  
-   Typed configs, scenario builders, structured experiment outputs, text/markdown reports.
-
-## Dependency boundary
-
-- **Core** (`src/qhpc_cache`): standard library only.
-- **Optional** (`tools/research_agent/`): small doc-index script, not imported by core.
-- **Optional** (`tools/codex_dev/`): Codex CLI wrapper (stdlib) and LangChain hook when `pip install -e ".[ai-workflow]"` is used; never imported by core.
-
-## Extension points
-
-- Swap `MonteCarloPricer` payoff dispatch for new instruments.
-- Add backend-specific adapters under a future `integrations/` package (not required now).
-- Train an external model for `AIAssistedCachePolicy` without changing pricing math.
+| Script | Purpose |
+|--------|---------|
+| `run_full_research_pipeline.py` | Agentic orchestration of the full research workflow |
+| `run_research_visualization_demo.py` | Visualization-focused demo with all figure types |
+| `run_data_ingestion_event_book_demo.py` | Data pipeline with Databento + TAQ + events |
+| `run_demo.py` | Classical finance baseline walkthrough |
+| `scripts/check_env.py` | Environment validation report |
+| `scripts/bootstrap_local_workspace.py` | Create directory structure and registry |
+| `scripts/validate_local_resources.py` | Deep resource validation with JSON output |

@@ -1,4 +1,10 @@
-"""High-risk event book: catalog, TAQ extraction, validation, manifest."""
+"""High-risk event book: catalog, TAQ extraction, validation, manifest.
+
+For **PERMNO-aligned** end-to-end runs (WRDS link + stocknames + dse/mse + normalized
+storage), use ``taq_event_pipeline.run_aligned_event_pipeline`` (see
+``docs/event_alignment_design.md``). This module remains the **batch catalog** path
+(``extract_event_windows_from_taq``) sharing ``taq_kdb_adapter`` with the alignment layer.
+"""
 
 from __future__ import annotations
 

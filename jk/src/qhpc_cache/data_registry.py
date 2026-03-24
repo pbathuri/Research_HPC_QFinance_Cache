@@ -25,7 +25,7 @@ CHECKPOINT_NAMES = (
     "rates_layer_complete",
     "analytics_ready",
     "critical_cache_window_built",
-    "pixel_trace_exported",
+    "pixel_trace_exported",  # legacy label: optional workflow/trace export (JSON/JSONL), not Pixel-critical
 )
 
 

@@ -25,6 +25,10 @@ class TestAIAssistedCachePolicy(unittest.TestCase):
         result = policy.decide(features)
         self.assertIsInstance(result, bool)
 
+    def test_invalid_fallback_mode_raises(self):
+        with self.assertRaises(ValueError):
+            AIAssistedCachePolicy(fallback_mode="invalid_mode")
+
 
 class TestHeuristicCachePolicy(unittest.TestCase):
     """Basic test for HeuristicCachePolicy.decide."""

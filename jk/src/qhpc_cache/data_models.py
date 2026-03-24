@@ -111,6 +111,94 @@ class EventBookSummary:
 
 
 @dataclass
+class EventAlignmentManifest:
+    """Reproducible metadata for a CRSP+TAQ aligned event window (sidecar JSON)."""
+
+    schema_version: str = "1.0"
+    event_identifier: str = ""
+    event_label: str = ""
+    deterministic_label: str = ""
+    taq_row_count: int = 0
+    aligned_row_count: int = 0
+    permno_match_rate: float = 0.0
+    match_sources_used: str = ""  # e.g. tclink;taqmclink
+    match_confidence_note: str = ""
+    security_master_attached: bool = False
+    crsp_events_attached: bool = False
+    normalized_storage_path: str = ""
+    manifest_storage_path: str = ""
+    window_start_utc: str = ""
+    window_end_utc: str = ""
+    created_at_utc: str = ""
+    extra: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "event_identifier": self.event_identifier,
+            "event_label": self.event_label,
+            "deterministic_label": self.deterministic_label,
+            "taq_row_count": self.taq_row_count,
+            "aligned_row_count": self.aligned_row_count,
+            "permno_match_rate": self.permno_match_rate,
+            "match_sources_used": self.match_sources_used,
+            "match_confidence_note": self.match_confidence_note,
+            "security_master_attached": self.security_master_attached,
+            "crsp_events_attached": self.crsp_events_attached,
+            "normalized_storage_path": self.normalized_storage_path,
+            "manifest_storage_path": self.manifest_storage_path,
+            "window_start_utc": self.window_start_utc,
+            "window_end_utc": self.window_end_utc,
+            "created_at_utc": self.created_at_utc,
+            "extra": dict(self.extra),
+        }
+
+
+@dataclass
+class FeaturePanelManifest:
+    """Metadata for a CRSP-backed feature panel build."""
+
+    schema_version: str = "1.0"
+    panel_key: str = ""
+    deterministic_label: str = ""
+    n_securities: int = 0
+    n_dates: int = 0
+    n_rows: int = 0
+    date_range_start: str = ""
+    date_range_end: str = ""
+    feature_count_before_condense: int = 0
+    feature_count_after_condense: int = 0
+    rates_attached: bool = False
+    event_tags_attached: bool = False
+    alignment_manifest_ref: str = ""
+    storage_path: str = ""
+    created_at_utc: str = ""
+    feature_columns: List[str] = field(default_factory=list)
+    extra: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "panel_key": self.panel_key,
+            "deterministic_label": self.deterministic_label,
+            "n_securities": self.n_securities,
+            "n_dates": self.n_dates,
+            "n_rows": self.n_rows,
+            "date_range_start": self.date_range_start,
+            "date_range_end": self.date_range_end,
+            "feature_count_before_condense": self.feature_count_before_condense,
+            "feature_count_after_condense": self.feature_count_after_condense,
+            "rates_attached": self.rates_attached,
+            "event_tags_attached": self.event_tags_attached,
+            "alignment_manifest_ref": self.alignment_manifest_ref,
+            "storage_path": self.storage_path,
+            "created_at_utc": self.created_at_utc,
+            "feature_columns": list(self.feature_columns),
+            "extra": dict(self.extra),
+        }
+
+
+@dataclass
 class DatasetRegistryEntry:
     """One registered artifact (daily, event, rates, or reference)."""
 
@@ -132,6 +220,9 @@ class DatasetRegistryEntry:
     parent_dataset_label: str
     source_backend: str = ""
     notes: str = ""
+    # WRDS / institutional pulls (optional; backward-compatible with older registry JSON)
+    wrds_source_table: str = ""
+    wrds_dataset_role: str = ""  # canonical | enrichment | optional
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -153,6 +244,8 @@ class DatasetRegistryEntry:
             "parent_dataset_label": self.parent_dataset_label,
             "source_backend": self.source_backend,
             "notes": self.notes,
+            "wrds_source_table": self.wrds_source_table,
+            "wrds_dataset_role": self.wrds_dataset_role,
         }
 
     @staticmethod
@@ -176,4 +269,6 @@ class DatasetRegistryEntry:
             parent_dataset_label=str(row.get("parent_dataset_label", "")),
             source_backend=str(row.get("source_backend", "")),
             notes=str(row.get("notes", "")),
+            wrds_source_table=str(row.get("wrds_source_table") or ""),
+            wrds_dataset_role=str(row.get("wrds_dataset_role") or ""),
         )

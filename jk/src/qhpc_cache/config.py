@@ -1,7 +1,7 @@
 """Centralized configuration for pricing, experiments, and demos."""
 
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 
 @dataclass
@@ -14,6 +14,7 @@ class PricingConfig:
     sigma: float = 0.2
     T: float = 1.0
     num_paths: int = 8_000
+    random_seed: Optional[int] = None
 
 
 @dataclass
@@ -35,6 +36,7 @@ class ExperimentDefaults:
     monte_carlo_replications: int = 5
     repeated_pricing_trials: int = 3
     payoff_comparison_paths: int = 4000
+    base_random_seed: Optional[int] = 7
 
 
 @dataclass
@@ -72,6 +74,84 @@ class DemoRunDefaults:
     cache_demo_seed: int = 5
     variance_reduction_paths: int = 3000
     variance_reduction_seed: int = 99
+
+
+@dataclass
+class VisualizationConfig:
+    """Parameters for ``run_research_visualization_demo.py``."""
+
+    symbols: List[str] = field(
+        default_factory=lambda: ["SPY", "QQQ", "IWM", "AAPL", "MSFT",
+                                 "AMZN", "GOOG", "TSLA", "JPM", "GLD"]
+    )
+    start_date: str = "2023-01-01"
+    end_date: str = "2024-12-31"
+    lookback_days: int = 504
+    max_symbols_corr: int = 20
+    enable_databento: bool = True
+    enable_taq: bool = True
+    output_root: str = "outputs/research_visualization"
+    mc_paths_for_sim_comparison: int = 10_000
+    mc_seed: int = 42
+    rolling_vol_window: int = 21
+    alpha_forward_horizon: int = 5
+    alpha_quantile_buckets: int = 5
+
+
+@dataclass
+class QMCSimulationConfig:
+    """Parameters for the QMC simulation harness."""
+
+    budget_minutes: float = 20.0
+    gan_epochs: int = 30
+    gan_num_days: int = 500
+    gan_num_assets: int = 100
+    portfolio_size: int = 500
+    convergence_path_counts: List[int] = field(
+        default_factory=lambda: [1_000, 5_000, 10_000, 50_000, 100_000, 500_000]
+    )
+    convergence_contracts: int = 8
+    live_dashboard: bool = True
+    output_dir: str = "outputs/qmc_simulation"
+    seed: int = 42
+    trace_full_mode: bool = False
+    enforce_budget: bool = True
+    trace_window_size: int = 64
+    trace_stride: int = 16
+    emit_visuals: bool = True
+    max_trace_rows: Optional[int] = None
+    max_phase_contracts: Optional[int] = None
+    max_phase_convergence_contracts: Optional[int] = None
+    max_pricings_total: Optional[int] = None
+    engine_allowlist: Optional[List[str]] = None
+    trace_output_subdir: str = "trace"
+    # similarity
+    enable_similarity_matching: bool = True
+    similarity_method: str = "hybrid"
+    similarity_threshold: float = 0.92
+    similarity_max_candidates: int = 32
+    similarity_signature_dims: int = 8
+    similarity_bucket_bits: int = 12
+    # PMU
+    enable_pmu: bool = False
+    pmu_backend: str = "auto"
+    pmu_sample_scope: str = "engine_call"
+    pmu_collect_memory: bool = True
+    pmu_collect_cycles: bool = True
+    pmu_collect_instructions: bool = True
+    pmu_collect_cache_refs: bool = True
+    pmu_collect_cache_misses: bool = True
+    pmu_collect_branches: bool = False
+    pmu_collect_page_faults: bool = False
+
+
+def get_qmc_config() -> "QMCSimulationConfig":
+    return QMCSimulationConfig()
+
+
+def get_visualization_config() -> VisualizationConfig:
+    """Return the default visualization configuration."""
+    return VisualizationConfig()
 
 
 def get_default_config() -> PricingConfig:

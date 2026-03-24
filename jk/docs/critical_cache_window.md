@@ -17,7 +17,9 @@ The **critical cache window** is a **small, structured** set of research concept
 
 ## Domains covered
 
-Market data sourcing, feature engineering, alpha research, overfitting/robustness, VaR/CVaR, volatility/time series, Black–Scholes, COS/Fourier, quantum finance mapping, QMCI/QAE, circuit caching, similarity caching, hybrid quantum/HPC.
+Market data sourcing, feature engineering, alpha research, overfitting/robustness, VaR/CVaR, volatility/time series, Black–Scholes, COS/Fourier, quantum finance mapping, QMCI/QAE, circuit caching, similarity caching, hybrid quantum/HPC, **WRDS/CRSP enrichment**, **rates source priority**, **workload-level cache observability**.
+
+See also ``docs/current_canonical_module_map.md`` and ``docs/research_alignment_checkpoint.md``.
 
 ## Editing policy
 

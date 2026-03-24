@@ -6,12 +6,17 @@ This is a **lab-maintained** index: tie major readings to code you can run or ex
 |-------|----------------------------------|-----------------|
 | Stochastic calculus & options | Björk, Shreve, Hull (options) | `analytic_pricing.py`, `market_models.py`, `pricing.py` |
 | Risk & extremes | McNeil–Frey–Embrechts | `risk_metrics.py`, `historical_risk.py`, `portfolio.py` |
-| Empirical asset pricing / factors | Cochrane, FF documentation | `universe_analysis.py`, `historical_returns.py`; future `wrds_placeholder.py` |
+| Empirical asset pricing / factors | Cochrane, FF documentation | `universe_analysis.py`, `historical_returns.py`; **`wrds_provider.py`**, `wrds_registry.py`, `wrds_queries.py` |
 | Market microstructure / TAQ | Hasbrouck, O’Hara, venue docs | `taq_kdb_adapter.py`, `event_book.py`, `data_sources.py` |
 | Fourier / COS methods | Fang & Oosterlee | `fourier_placeholder.py` |
 | Quantum Monte Carlo / QAE surveys | Montanaro et al. | `quantum_mapping.py`, `quantum_workflow.py` |
 | NISQ workflows / caching | Circuit reuse literature | `circuit_cache.py`, `circuit_similarity.py`, `cache_policy.py` |
-| Data engineering at scale | Vendor schema guides, WRDS manuals | `data_ingestion.py`, `data_registry.py`; future WRDS layer |
+| Data engineering at scale | Vendor schema guides, WRDS manuals | `data_ingestion.py`, `data_registry.py`, **`wrds_provider.py`**, `rates_data.py` |
+
+## Institutional data (active)
+
+- **WRDS / CRSP** enrichment: see `docs/wrds_active_integration.md` and `research_memory.DataSourceAnchor` seeds.
+- **Rates priority**: `docs/rates_source_priority.md` and `rates_data.load_risk_free_rate_series_priority`.
 
 ## How to extend
 

@@ -8,6 +8,16 @@ version = "0.1.0"
 description = "Monte Carlo pricing and cache prototype"
 
 [project.optional-dependencies]
+# Run tests: pip install -e ".[test]"
+test = [
+  "pytest>=8.0",
+]
+# Institutional data (optional; requires WRDS account + WRDS_USERNAME).
+wrds = [
+  "wrds>=3.1.0",
+  "pandas>=2.0",
+  "sqlalchemy>=2.0",
+]
 # Optional: LangChain hook in tools/codex_dev/ (never imported by qhpc_cache core).
 ai-workflow = [
   "langchain-core>=0.3.0",

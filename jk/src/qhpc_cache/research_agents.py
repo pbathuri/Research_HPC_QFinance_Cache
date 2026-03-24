@@ -1,9 +1,9 @@
 """Explicit multi-role **simulation** of the qhpc_cache research workflow.
 
 This is **not** an LLM agent framework. It models named research roles, tasks,
-and events so traces can be exported for visualization (e.g. Pixel Agents bridge)
-and for human reasoning about who does what across finance, risk, quantum
-mapping, cache policy, and experiments.
+and events so traces can be exported as JSON/JSONL/text via
+``research_workflow_export`` (optional teaching / audit path — **not** the core
+research spine).
 
 No external agent runtime is invoked from this module.
 """
@@ -141,9 +141,9 @@ def build_default_research_agent_profiles() -> List[ResearchAgentProfile]:
         ResearchAgentProfile(
             agent_name="VisualizationAgent",
             agent_role="workflow_visibility",
-            agent_description="Exports traces for Pixel Agents bridge and human-readable summaries.",
-            assigned_directory="jk/tools/pixel_agents_bridge",
-            assigned_focus_area="event_schema, trace_exporter, research_workflow outputs",
+            agent_description="Exports matplotlib/seaborn figures and optional workflow JSON traces.",
+            assigned_directory="jk/src/qhpc_cache/visualization",
+            assigned_focus_area="plot_utils, research_workflow_export, markdown/CSV reports",
             preferred_tools=["export_research_trace_to_json", "jsonl"],
             current_status="idle",
         ),
@@ -375,7 +375,7 @@ def build_demo_simulation_trace() -> ResearchSimulationTrace:
         "VisualizationAgent",
         "export",
         "task-docs-006",
-        "jk/tools/pixel_agents_bridge/trace_exporter.py",
+        "jk/src/qhpc_cache/research_workflow_export.py",
         "Prepared JSON + JSONL export for workflow trace",
         status_label="complete",
     )
@@ -393,7 +393,7 @@ def build_demo_simulation_trace() -> ResearchSimulationTrace:
                 "task-docs-006",
             ],
             active_events=[e.event_identifier for e in events[-2:]],
-            notes="Trace export ready; Pixel Agents bridge is optional sidecar.",
+            notes="Trace export ready (in-package JSON/JSONL; no external bridge).",
         )
     )
 

@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, replace
 from typing import Any, List, Optional
 
 from qhpc_cache.analytic_pricing import (
@@ -54,6 +55,12 @@ class MonteCarloPricingResult:
     used_antithetic_variates: bool
     used_control_variate: bool
     analytic_reference_price: Optional[float] = None
+    total_runtime_ms: float = 0.0
+    cache_lookup_time_ms: float = 0.0
+    simulation_time_ms: float = 0.0
+    payoff_aggregation_time_ms: float = 0.0
+    cache_put_time_ms: float = 0.0
+    cache_hit: bool = False
 
 
 @dataclass
@@ -94,26 +101,110 @@ class MonteCarloPricer:
 
     def price_option(self) -> MonteCarloPricingResult:
         """Run simulation, optionally consult cache, return structured result."""
+        total_start = time.perf_counter()
         self._validate_simulation_inputs()
         features = build_cache_features(
-            self.payoff_type, self.num_paths, self.sigma, self.T
+            instrument_type=self.payoff_type,
+            S0=self.S0,
+            K=self.K,
+            r=self.r,
+            sigma=self.sigma,
+            T=self.T,
+            num_paths=self.num_paths,
+            simulation_mode=self.simulation_mode,
+            num_time_steps=self.num_time_steps,
+            use_antithetic_variates=self.use_antithetic_variates,
+            use_black_scholes_control_variate=self.use_black_scholes_control_variate,
+            compare_analytic_black_scholes=self.compare_analytic_black_scholes,
+            confidence_level=self.confidence_level,
+            digital_payout_amount=self.digital_payout_amount,
+            random_seed=self.random_seed,
+        )
+        cache_lookup_time_ms = 0.0
+        cache_put_time_ms = 0.0
+
+        if self.cache_store is not None:
+            policy_allows_lookup = (
+                True
+                if self.cache_policy is None
+                else bool(self.cache_policy.decide(features))
+            )
+            if policy_allows_lookup:
+                lookup_start = time.perf_counter()
+                if hasattr(self.cache_store, "try_get"):
+                    hit, cached = self.cache_store.try_get(
+                        features,
+                        policy_approved_reuse=(self.cache_policy is not None),
+                    )
+                else:
+                    try:
+                        cached = self.cache_store.get(features)
+                        hit = True
+                    except KeyError:
+                        cached = None
+                        hit = False
+                cache_lookup_time_ms = (time.perf_counter() - lookup_start) * 1000.0
+                if hit:
+                    if isinstance(cached, MonteCarloPricingResult):
+                        return self._attach_runtime_metrics(
+                            cached,
+                            total_runtime_ms=(time.perf_counter() - total_start) * 1000.0,
+                            cache_lookup_time_ms=cache_lookup_time_ms,
+                            simulation_time_ms=0.0,
+                            payoff_aggregation_time_ms=0.0,
+                            cache_put_time_ms=0.0,
+                            cache_hit=True,
+                        )
+                    if isinstance(cached, tuple) and len(cached) == 2:
+                        mean_price, payoff_variance = float(cached[0]), float(cached[1])
+                        result = self._result_from_mean_var(
+                            mean_price, payoff_variance, analytic_override=None
+                        )
+                        return self._attach_runtime_metrics(
+                            result,
+                            total_runtime_ms=(time.perf_counter() - total_start) * 1000.0,
+                            cache_lookup_time_ms=cache_lookup_time_ms,
+                            simulation_time_ms=0.0,
+                            payoff_aggregation_time_ms=0.0,
+                            cache_put_time_ms=0.0,
+                            cache_hit=True,
+                        )
+
+        result, simulation_time_ms, payoff_aggregation_time_ms = self._simulate_and_price()
+        if self.cache_store is not None:
+            put_start = time.perf_counter()
+            self.cache_store.put(features, result)
+            cache_put_time_ms = (time.perf_counter() - put_start) * 1000.0
+        return self._attach_runtime_metrics(
+            result,
+            total_runtime_ms=(time.perf_counter() - total_start) * 1000.0,
+            cache_lookup_time_ms=cache_lookup_time_ms,
+            simulation_time_ms=simulation_time_ms,
+            payoff_aggregation_time_ms=payoff_aggregation_time_ms,
+            cache_put_time_ms=cache_put_time_ms,
+            cache_hit=False,
         )
 
-        if self.cache_policy is not None and self.cache_store is not None:
-            if self.cache_policy.decide(features) and self.cache_store.has(features):
-                cached = self.cache_store.get(features)
-                if isinstance(cached, MonteCarloPricingResult):
-                    return cached
-                if isinstance(cached, tuple) and len(cached) == 2:
-                    mean_price, payoff_variance = float(cached[0]), float(cached[1])
-                    return self._result_from_mean_var(
-                        mean_price, payoff_variance, analytic_override=None
-                    )
-
-        result = self._simulate_and_price()
-        if self.cache_store is not None:
-            self.cache_store.put(features, result)
-        return result
+    @staticmethod
+    def _attach_runtime_metrics(
+        result: MonteCarloPricingResult,
+        *,
+        total_runtime_ms: float,
+        cache_lookup_time_ms: float,
+        simulation_time_ms: float,
+        payoff_aggregation_time_ms: float,
+        cache_put_time_ms: float,
+        cache_hit: bool,
+    ) -> MonteCarloPricingResult:
+        return replace(
+            result,
+            total_runtime_ms=float(total_runtime_ms),
+            cache_lookup_time_ms=float(cache_lookup_time_ms),
+            simulation_time_ms=float(simulation_time_ms),
+            payoff_aggregation_time_ms=float(payoff_aggregation_time_ms),
+            cache_put_time_ms=float(cache_put_time_ms),
+            cache_hit=bool(cache_hit),
+        )
 
     def _result_from_mean_var(
         self,
@@ -171,7 +262,7 @@ class MonteCarloPricer:
             )
         return None
 
-    def _simulate_and_price(self) -> MonteCarloPricingResult:
+    def _simulate_and_price(self) -> tuple[MonteCarloPricingResult, float, float]:
         rng = random.Random(self.random_seed)
         analytic_reference = self._analytic_reference_optional()
 
@@ -214,7 +305,8 @@ class MonteCarloPricer:
         self,
         rng: random.Random,
         analytic_reference: Optional[float],
-    ) -> MonteCarloPricingResult:
+    ) -> tuple[MonteCarloPricingResult, float, float]:
+        simulation_start = time.perf_counter()
         base_draws = [
             rng.gauss(0.0, 1.0) for path_index in range(self.num_paths)
         ]
@@ -223,7 +315,6 @@ class MonteCarloPricer:
         else:
             z_list = base_draws
 
-        discounted_payoffs: List[float] = []
         terminal_spots: List[float] = []
         for draw_index in range(len(z_list)):
             z = z_list[draw_index]
@@ -231,10 +322,14 @@ class MonteCarloPricer:
                 self.S0, self.r, self.sigma, self.T, z
             )
             terminal_spots.append(spot_terminal)
+        simulation_time_ms = (time.perf_counter() - simulation_start) * 1000.0
+
+        payoff_start = time.perf_counter()
+        discounted_payoffs: List[float] = []
+        discount_factor = math.exp(-self.r * self.T)
+        for spot_terminal in terminal_spots:
             payoff_terminal = self._terminal_payoff(spot_terminal)
-            discounted_payoffs.append(
-                math.exp(-self.r * self.T) * payoff_terminal
-            )
+            discounted_payoffs.append(discount_factor * payoff_terminal)
 
         used_control = (
             self.use_black_scholes_control_variate
@@ -250,32 +345,34 @@ class MonteCarloPricer:
         else:
             mean_price = self._mean(discounted_payoffs)
             payoff_variance = self._sample_variance(discounted_payoffs, mean_price)
+        payoff_aggregation_time_ms = (time.perf_counter() - payoff_start) * 1000.0
 
-        return self._finalize_terminal_result(
+        result = self._finalize_terminal_result(
             mean_price,
             payoff_variance,
             len(discounted_payoffs),
             analytic_reference,
             used_control,
         )
+        return result, simulation_time_ms, payoff_aggregation_time_ms
 
     def _price_path_scenarios(
         self,
         rng: random.Random,
         analytic_reference: Optional[float],
-    ) -> MonteCarloPricingResult:
+    ) -> tuple[MonteCarloPricingResult, float, float]:
         if self.payoff_type not in ("asian_call", "asian_put"):
             raise ValueError(
                 "Path simulation_mode is intended for asian_call / asian_put."
             )
-        discounted_payoffs: List[float] = []
-        discount_factor = math.exp(-self.r * self.T)
+        simulation_start = time.perf_counter()
+        path_variants_all: List[List[float]] = []
         for path_index in range(self.num_paths):
             increments = [
                 rng.gauss(0.0, 1.0)
                 for step_index in range(self.num_time_steps)
             ]
-            path_variants: List[List[float]] = [
+            path_variants_all.append(
                 simulate_gbm_price_path_using_increments(
                     self.S0,
                     self.r,
@@ -284,10 +381,10 @@ class MonteCarloPricer:
                     self.num_time_steps,
                     increments,
                 )
-            ]
+            )
             if self.use_antithetic_variates:
                 negated = [-z for z in increments]
-                path_variants.append(
+                path_variants_all.append(
                     simulate_gbm_price_path_using_increments(
                         self.S0,
                         self.r,
@@ -297,10 +394,13 @@ class MonteCarloPricer:
                         negated,
                     )
                 )
-            for spot_path in path_variants:
-                discounted_payoffs.append(
-                    discount_factor * self._path_payoff(spot_path)
-                )
+        simulation_time_ms = (time.perf_counter() - simulation_start) * 1000.0
+
+        payoff_start = time.perf_counter()
+        discounted_payoffs: List[float] = []
+        discount_factor = math.exp(-self.r * self.T)
+        for spot_path in path_variants_all:
+            discounted_payoffs.append(discount_factor * self._path_payoff(spot_path))
 
         mean_price = self._mean(discounted_payoffs)
         payoff_variance = self._sample_variance(discounted_payoffs, mean_price)
@@ -309,7 +409,8 @@ class MonteCarloPricer:
         low, high = confidence_interval_from_standard_error(
             mean_price, standard_error, self.confidence_level
         )
-        return MonteCarloPricingResult(
+        payoff_aggregation_time_ms = (time.perf_counter() - payoff_start) * 1000.0
+        result = MonteCarloPricingResult(
             estimated_price=mean_price,
             discounted_payoff_mean=mean_price,
             payoff_variance=payoff_variance,
@@ -323,6 +424,7 @@ class MonteCarloPricer:
             used_control_variate=False,
             analytic_reference_price=analytic_reference,
         )
+        return result, simulation_time_ms, payoff_aggregation_time_ms
 
     def _terminal_payoff(self, terminal_spot_price: float) -> float:
         if self.payoff_type == "european_call":

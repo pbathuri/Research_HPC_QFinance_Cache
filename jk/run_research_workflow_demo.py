@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Simulate multi-role research workflow and export traces for optional visualization.
+"""Simulate multi-role research workflow and export traces (legacy / optional).
+
+**Non-spine:** teaching trace only. Does not require Pixel Agents or any bridge.
 
 Writes under ``outputs/research_workflow/``:
   - ``research_workflow_trace.json`` — full trace (qhpc schema)
   - ``research_workflow_events.jsonl`` — one event per line
   - ``research_workflow_summary.txt`` — human-readable
-  - ``research_workflow_pixel_shim.jsonl`` — Claude-shaped lines (see bridge README)
 
 Requires: run from ``jk/`` with ``PYTHONPATH=src`` or rely on path inserts below.
 """
@@ -17,17 +18,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(ROOT / "tools" / "pixel_agents_bridge"))
 
-from qhpc_cache.research_agents import (
+from qhpc_cache.research_agents import (  # noqa: E402
     build_default_research_agent_profiles,
     build_default_research_task_set,
     build_demo_simulation_trace,
     summarize_research_workflow_state,
 )
-
-import pixel_agents_adapter
-import trace_exporter
+from qhpc_cache.research_workflow_export import (  # noqa: E402
+    export_research_trace_to_json,
+    export_research_trace_to_jsonl,
+    export_research_trace_summary,
+)
 
 
 def main() -> None:
@@ -53,29 +55,19 @@ def main() -> None:
     print(summarize_research_workflow_state(trace.workflow_state_snapshots[-1]))
     print()
 
-    trace_exporter.export_research_trace_to_json(
-        out_dir / "research_workflow_trace.json", trace
-    )
-    trace_exporter.export_research_trace_to_jsonl(
-        out_dir / "research_workflow_events.jsonl", trace
-    )
-    trace_exporter.export_research_trace_summary(
-        out_dir / "research_workflow_summary.txt", trace
-    )
-    pixel_agents_adapter.export_pixel_agents_compatible_trace(
-        out_dir / "research_workflow_pixel_shim.jsonl", trace
-    )
+    export_research_trace_to_json(out_dir / "research_workflow_trace.json", trace)
+    export_research_trace_to_jsonl(out_dir / "research_workflow_events.jsonl", trace)
+    export_research_trace_summary(out_dir / "research_workflow_summary.txt", trace)
 
     print("Wrote:")
     for name in (
         "research_workflow_trace.json",
         "research_workflow_events.jsonl",
         "research_workflow_summary.txt",
-        "research_workflow_pixel_shim.jsonl",
     ):
         print(f"  {out_dir / name}")
     print()
-    print(pixel_agents_adapter.explain_pixel_agents_mapping())
+    print("Note: optional Pixel-style JSONL shims are not produced; use qhpc JSON/JSONL above.")
 
 
 if __name__ == "__main__":

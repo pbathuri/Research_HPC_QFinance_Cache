@@ -22,6 +22,7 @@ class RatesSourceSummary:
     date_start: str
     date_end: str
     notes: str
+    tier: str = "fallback"  # institutional | secondary | file_institutional | fallback
 
 
 def build_flat_rate_fallback(
@@ -74,6 +75,7 @@ def load_pluggable_risk_free_rate_series(
             date_start=str(series["date"].iloc[0]) if len(series) else "",
             date_end=str(series["date"].iloc[-1]) if len(series) else "",
             notes="Loaded from local CRSP/WRDS-style file; verify units in metadata.",
+            tier="file_institutional",
         )
         return series, summary
 
@@ -89,8 +91,124 @@ def load_pluggable_risk_free_rate_series(
         date_start=str(calendar_dates[0]) if calendar_dates else "",
         date_end=str(calendar_dates[-1]) if calendar_dates else "",
         notes="No CRSP file at QHPC_CRSP_TREASURY_PATH — using constant rate for teaching only.",
+        tier="fallback",
     )
     return frame, summary
+
+
+def _normalize_wrds_treasury_frame(raw: "pd.DataFrame") -> "pd.DataFrame":
+    """Best-effort: map CRSP/WRDS Treasury-like columns to date + risk_free_rate."""
+    if pd is None or raw is None or len(raw) == 0:
+        raise ValueError("invalid frame")
+    df = raw.copy()
+    date_col = None
+    for c in ("date", "caldt", "time_avail_m", "yyyymm", "mcaldt"):
+        if c in df.columns:
+            date_col = c
+            break
+    if date_col is None:
+        date_col = df.columns[0]
+    rate_col = None
+    for c in ("tmyield", "yield", "risk_free_rate", "rf", "tbill_yield", "rate"):
+        if c in df.columns:
+            rate_col = c
+            break
+    if rate_col is None:
+        num = [c for c in df.columns if df[c].dtype.kind in "fiu"]
+        rate_col = num[1] if len(num) > 1 else num[0]
+    out = pd.DataFrame(
+        {
+            "date": pd.to_datetime(df[date_col], errors="coerce").dt.strftime("%Y-%m-%d"),
+            "risk_free_rate": pd.to_numeric(df[rate_col], errors="coerce"),
+            "source": "wrds_crsp_treasury_candidate",
+        }
+    )
+    return out.dropna(subset=["date", "risk_free_rate"])
+
+
+def load_risk_free_rate_series_priority(
+    *,
+    calendar_dates: Sequence[str],
+    crsp_path: Optional[str] = None,
+    fallback_annual_rate: float = 0.03,
+    try_wrds: bool = True,
+    wrds_username: Optional[str] = None,
+    wrds_treasury_limit: int = 100_000,
+) -> Tuple["pd.DataFrame", RatesSourceSummary]:
+    """Load risk-free series with explicit priority (see ``docs/rates_source_priority.md``).
+
+    Order when ``try_wrds`` is True:
+      1. WRDS ``crsp.tfz_dly`` (institutional daily)
+      2. WRDS ``crsp.tfz_mth`` (institutional monthly)
+      3. WRDS FRB candidates (secondary)
+      4. Local CRSP file via ``crsp_path`` or env
+      5. Flat fallback
+    """
+    import os
+    from pathlib import Path
+
+    if pd is None:
+        raise RuntimeError("pandas required")
+
+    path_arg = crsp_path or os.environ.get("QHPC_CRSP_TREASURY_PATH", "")
+
+    if try_wrds:
+        try:
+            from qhpc_cache.wrds_provider import (
+                check_wrds_connection,
+                load_crsp_treasury_daily,
+                load_crsp_treasury_monthly,
+                load_frb_rates_if_available,
+            )
+
+            ok, _, db = check_wrds_connection(wrds_username=wrds_username)
+            if ok and db is not None:
+                for loader, label in (
+                    (load_crsp_treasury_daily, "wrds_crsp_tfz_dly"),
+                    (load_crsp_treasury_monthly, "wrds_crsp_tfz_mth"),
+                ):
+                    df, meta = loader(db, limit=wrds_treasury_limit)
+                    if df is not None and len(df) > 0:
+                        try:
+                            series = _normalize_wrds_treasury_frame(df)
+                            if len(series) > 0:
+                                tbl = meta.get("wrds_source_table", f'{meta.get("schema")}.{meta.get("table")}')
+                                return series, RatesSourceSummary(
+                                    source_label=label,
+                                    is_fallback=False,
+                                    row_count=len(series),
+                                    date_start=str(series["date"].iloc[0]),
+                                    date_end=str(series["date"].iloc[-1]),
+                                    notes=f"WRDS canonical table {tbl}; verify yield units in CRSP docs.",
+                                    tier="institutional",
+                                )
+                        except Exception:
+                            pass  # noqa: S110 — try next tier
+
+                df2, meta2 = load_frb_rates_if_available(db)
+                if df2 is not None and len(df2) > 0:
+                    try:
+                        series2 = _normalize_wrds_treasury_frame(df2)
+                        if len(series2) > 0:
+                            return series2, RatesSourceSummary(
+                                source_label="wrds_frb_rates",
+                                is_fallback=False,
+                                row_count=len(series2),
+                                date_start=str(series2["date"].iloc[0]),
+                                date_end=str(series2["date"].iloc[-1]),
+                                notes=f"WRDS FRB candidate schema={meta2.get('schema')} table={meta2.get('table')}.",
+                                tier="secondary",
+                            )
+                    except Exception:
+                        pass
+        except Exception:
+            pass  # noqa: S110 — WRDS optional
+
+    return load_pluggable_risk_free_rate_series(
+        crsp_path=path_arg if path_arg and Path(path_arg).exists() else None,
+        calendar_dates=calendar_dates,
+        fallback_annual_rate=fallback_annual_rate,
+    )
 
 
 def align_rates_to_daily_universe(
@@ -123,4 +241,5 @@ def summarize_rates_source(summary: RatesSourceSummary) -> Dict[str, Any]:
         "date_start": summary.date_start,
         "date_end": summary.date_end,
         "notes": summary.notes,
+        "tier": summary.tier,
     }

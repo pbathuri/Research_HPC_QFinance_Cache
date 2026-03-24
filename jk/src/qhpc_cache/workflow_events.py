@@ -1,4 +1,7 @@
-"""Structured workflow events for data-ingestion runs (Pixel Agents export)."""
+"""Structured workflow events for data-ingestion runs (JSON-serializable audit trail).
+
+Not tied to any external visualization product; prefer CSV/markdown for inspection.
+"""
 
 from __future__ import annotations
 

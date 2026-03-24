@@ -78,15 +78,47 @@ class HeuristicCachePolicy(BaseCachePolicy):
 class AIAssistedCachePolicy(BaseCachePolicy):
     """Optional external model hook; **not** a production finance classifier.
 
-    If ``model`` is absent or inference fails, falls back to
-    ``HeuristicCachePolicy`` so experiments stay runnable offline.
+    Fallback behavior is explicit and consistent across code/docs/tests:
+
+    - ``fallback_mode="heuristic"`` (default): use ``HeuristicCachePolicy``
+    - ``fallback_mode="always_reuse"``: return ``True``
+    - ``fallback_mode="no_reuse"``: return ``False``
+
+    If ``model`` is absent or inference fails, fallback mode is applied.
     """
 
-    def __init__(self, model: Any = None) -> None:
+    VALID_FALLBACK_MODES = {"heuristic", "always_reuse", "no_reuse"}
+
+    def __init__(self, model: Any = None, fallback_mode: str = "heuristic") -> None:
+        if fallback_mode not in self.VALID_FALLBACK_MODES:
+            raise ValueError(
+                "Invalid fallback_mode. Expected one of "
+                f"{sorted(self.VALID_FALLBACK_MODES)}, got {fallback_mode!r}."
+            )
         self.model = model
+        self.fallback_mode = str(fallback_mode)
         self._fallback = HeuristicCachePolicy()
+        self.last_inference_error: str = ""
+        self._decisions_total: int = 0
+        self._model_inference_used_count: int = 0
+        self._fallback_used_count: int = 0
+        self._fallback_no_model_count: int = 0
+        self._fallback_inference_error_count: int = 0
+        self.last_decision_source: str = "none"
+
+    def _fallback_decision(self, features: Dict[str, Any]) -> bool:
+        mode = self.fallback_mode
+        if mode == "heuristic":
+            return self._fallback.decide(features)
+        if mode == "always_reuse":
+            return True
+        if mode == "no_reuse":
+            return False
+        # Safe default if unsupported mode is provided.
+        return self._fallback.decide(features)
 
     def decide(self, features: Dict[str, Any]) -> bool:
+        self._decisions_total += 1
         if self.model is not None:
             try:
                 ordered_keys = sorted(features.keys())
@@ -100,10 +132,31 @@ class AIAssistedCachePolicy(BaseCachePolicy):
                     else:
                         feature_vector.append(0.0)
                 prob = float(self.model.predict_proba([feature_vector])[0][1])
+                self._model_inference_used_count += 1
+                self.last_decision_source = "model"
                 return prob > 0.5
             except Exception as exc:
-                print(
-                    "Warning: AIAssistedCachePolicy model inference failed "
-                    f"({exc}); falling back to heuristic policy."
-                )
-        return self._fallback.decide(features)
+                self.last_inference_error = str(exc)
+                self._fallback_used_count += 1
+                self._fallback_inference_error_count += 1
+                self.last_decision_source = "fallback_inference_error"
+                return self._fallback_decision(features)
+        self._fallback_used_count += 1
+        self._fallback_no_model_count += 1
+        self.last_decision_source = "fallback_no_model"
+        return self._fallback_decision(features)
+
+    def diagnostics(self) -> Dict[str, Any]:
+        """Return explicit policy decision diagnostics for experiment manifests."""
+        return {
+            "policy_name": self.__class__.__name__,
+            "fallback_mode": self.fallback_mode,
+            "has_model": self.model is not None,
+            "decisions_total": self._decisions_total,
+            "model_inference_used_count": self._model_inference_used_count,
+            "fallback_used_count": self._fallback_used_count,
+            "fallback_no_model_count": self._fallback_no_model_count,
+            "fallback_inference_error_count": self._fallback_inference_error_count,
+            "last_inference_error": self.last_inference_error,
+            "last_decision_source": self.last_decision_source,
+        }

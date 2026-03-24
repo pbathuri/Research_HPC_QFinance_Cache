@@ -1,5 +1,10 @@
 # Multi-agent research workflow visualization
 
+> Historical / legacy note: this document describes an older visualization story.
+> The current repo does **not** depend on `tools/pixel_agents_bridge/` and the
+> canonical trace export path is the in-package `qhpc_cache.research_workflow_export`.
+> Keep this doc for context, not as an operator instruction source.
+
 ## What is modeled
 
 The module **`qhpc_cache.research_agents`** defines a **simulation** of how work could be partitioned across named roles:
@@ -10,39 +15,36 @@ The module **`qhpc_cache.research_agents`** defines a **simulation** of how work
 - **CachePolicyAgent** — cache policies, circuit cache, similarity  
 - **LiteratureReviewAgent** — `docs/`, paper-to-code mapping  
 - **ExperimentAgent** — `experiment_runner.py`, configs, reporting  
-- **VisualizationAgent** — trace export and Pixel Agents bridge  
+- **VisualizationAgent** — trace export and optional summaries  
 
 This is **not** an LLM multi-agent runtime. It is a **data model + demo timeline** so humans (and tools) can see **stages, files, and task IDs** in one place.
 
-## How Pixel Agents fits in
+## Current export status
 
 | Layer | Role |
 |--------|------|
-| **Pixel Agents (VS Code)** | Observes **Claude Code** JSONL while you code; characters animate by tool type. |
-| **qhpc bridge (`tools/pixel_agents_bridge/`)** | Exports **qhpc-specific** JSON + JSONL + optional **Claude-shaped** shim lines. |
-| **Integration** | **Event trace bridge (Strategy A)** — see `docs/pixel_agents_integration_decision.md`. |
+| **`research_agents.py`** | Simulated workflow model (teaching / audit) |
+| **`run_research_workflow_demo.py`** | Legacy demo that writes JSON / JSONL / text under `outputs/research_workflow/` |
+| **`qhpc_cache.research_workflow_export`** | In-package export helper replacing the removed external bridge |
 
 **Implemented now**
 
 - `research_agents.py` — profiles, tasks, events, `build_demo_simulation_trace()`  
 - `run_research_workflow_demo.py` — console summary + writes under `outputs/research_workflow/`  
-- Bridge exporters + adapter (shim JSONL)  
-- `integrations/pixel_agents_integration.py` — pointers only  
+- `research_workflow_export.py` — JSON / JSONL / text export  
 
 **Optional / manual**
 
-- Loading qhpc JSONL into Pixel Agents **without** upstream extension changes  
-- Wiring Codex or other CLIs into the same trace format (custom logging)  
+- Wiring additional local tools into the same JSON / JSONL trace format (if desired)  
 
 **Future work**
 
-- A small VS Code command or webview that reads **qhpc** trace files  
-- Deeper agent-agnostic adapter in Pixel Agents upstream  
+- A lightweight local viewer for qhpc trace files if the research group needs one  
 
 ## Extending the visualization
 
 1. Add **tasks** in `build_default_research_task_set()` with real `related_module_names` and paper labels.  
 2. Append **events** in `build_demo_simulation_trace()` or build traces from your own runner.  
-3. Call `trace_exporter` / `pixel_agents_adapter` from notebooks or CI to archive runs.  
+3. Call `research_workflow_export` or run `run_research_workflow_demo.py` to archive runs.  
 
 Undergraduate tip: run **`python3 run_research_workflow_demo.py`** and diff `research_workflow_summary.txt` before/after a sprint to see how you described progress.
