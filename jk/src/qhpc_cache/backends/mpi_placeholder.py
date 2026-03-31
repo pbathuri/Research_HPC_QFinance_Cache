@@ -16,8 +16,15 @@ class MpiPlaceholderBackend(BaseBackend):
     def capabilities(self) -> BackendCapabilities:
         return BackendCapabilities(
             name="mpi_placeholder",
+            backend_kind="hpc_mpi_future",
+            execution_environment="hpc",
+            execution_mode_intent="mpi_batch_slurm",
             can_execute=False,
             supports_mpi=True,
+            supports_batch_scheduler=True,
+            hpc_ready=False,
+            mpi_ready=False,
+            gpu_ready=False,
             max_parallel_paths=0,
             notes="MPI backend not yet implemented; requires mpi4py and mpiexec launch.",
         )
@@ -36,6 +43,10 @@ class MpiPlaceholderBackend(BaseBackend):
             plan_id=f"mpi_{task_type}_{ranks}r",
             backend_name="mpi_placeholder",
             task_type=task_type,
+            requested_backend="mpi_placeholder",
+            execution_environment_intent="hpc",
+            execution_mode_intent="mpi_batch_slurm",
+            execution_mode_actual="deferred_to_hpc",
             parameters={**params, "mpi_ranks": ranks},
             estimated_runtime_seconds=max(0.01, num_paths / (ranks * 500_000)),
             estimated_memory_bytes=num_paths * 64,

@@ -17,8 +17,14 @@ class CudaPlaceholderBackend(BaseBackend):
     def capabilities(self) -> BackendCapabilities:
         return BackendCapabilities(
             name="cuda_placeholder",
+            backend_kind="hpc_gpu_future",
+            execution_environment="hpc",
+            execution_mode_intent="gpu_batch_slurm",
             can_execute=False,
             supports_gpu=True,
+            hpc_ready=False,
+            mpi_ready=False,
+            gpu_ready=False,
             max_parallel_paths=0,
             notes="CUDA backend not yet implemented; GPU kernel integration pending.",
         )
@@ -36,6 +42,10 @@ class CudaPlaceholderBackend(BaseBackend):
             plan_id=f"cuda_{task_type}",
             backend_name="cuda_placeholder",
             task_type=task_type,
+            requested_backend="cuda_placeholder",
+            execution_environment_intent="hpc",
+            execution_mode_intent="gpu_batch_slurm",
+            execution_mode_actual="deferred_to_hpc",
             parameters=params,
             estimated_runtime_seconds=max(0.001, num_paths / 10_000_000),
             estimated_memory_bytes=num_paths * 32,

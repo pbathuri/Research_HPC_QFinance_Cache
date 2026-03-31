@@ -604,18 +604,22 @@ def _plot_bar(frame: Any, *, x: str, y: str, hue: str = "", title: str, output_p
     plt, sns = _safe_plot_library()
     if plt is None:
         return None
+    drop_cols = [c for c in [x, y] + ([hue] if hue else []) if c in frame.columns]
+    plot_frame = frame.dropna(subset=drop_cols) if drop_cols else frame
+    if len(plot_frame) == 0:
+        return None
     fig = plt.figure(figsize=(9, 4.5))
     ax = fig.add_subplot(111)
     if sns is not None:
         if hue:
-            sns.barplot(data=frame, x=x, y=y, hue=hue, ax=ax)
+            sns.barplot(data=plot_frame, x=x, y=y, hue=hue, ax=ax)
         else:
-            sns.barplot(data=frame, x=x, y=y, ax=ax)
+            sns.barplot(data=plot_frame, x=x, y=y, ax=ax)
     else:
         if hue:
-            frame.pivot_table(index=x, columns=hue, values=y, aggfunc="mean").plot(kind="bar", ax=ax)
+            plot_frame.pivot_table(index=x, columns=hue, values=y, aggfunc="mean").plot(kind="bar", ax=ax)
         else:
-            frame.groupby(x)[y].mean().plot(kind="bar", ax=ax)
+            plot_frame.groupby(x)[y].mean().plot(kind="bar", ax=ax)
     ax.set_title(title)
     ax.tick_params(axis="x", rotation=25)
     fig.tight_layout()

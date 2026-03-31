@@ -403,7 +403,7 @@ def _has_pmu_data(rows: List[Dict[str, str]]) -> bool:
 
 def _no_data_figure(title: str, out: Path) -> Path:
     fig, ax = plt.subplots(figsize=(6, 4))
-    ax.text(0.5, 0.5, "PMU data not available",
+    ax.text(0.5, 0.5, "PMU-like data unavailable\n(proxy-only context)",
             ha="center", va="center", fontsize=14, color="gray")
     ax.set_title(title)
     ax.set_xticks([])
@@ -421,7 +421,7 @@ def plot_trace_pmu_cache_misses_over_time(trace_dir: Path) -> Path:
     fig, ax = plt.subplots(figsize=(12, 4))
     misses = [_f(r.get("pmu_cache_misses")) for r in rows]
     ax.plot(misses, linewidth=0.8)
-    ax.set_title("PMU Cache Misses Over Time")
+    ax.set_title("PMU-like Cache Misses Over Time (hardware when available)")
     ax.set_xlabel("Event Index")
     ax.set_ylabel("Cache Misses")
     _save(fig, out)
@@ -440,7 +440,7 @@ def plot_trace_pmu_ipc_by_engine(trace_dir: Path) -> Path:
     engines = [r.get("engine", "?") for r in rows]
     ipcs = [_f(r.get("pmu_ipc")) for r in rows]
     ax.bar(engines, ipcs, color="#4da6ff")
-    ax.set_title("Instructions Per Cycle by Engine")
+    ax.set_title("PMU-like IPC by Engine (hardware when available)")
     ax.set_ylabel("IPC")
     _save(fig, out)
     return out
@@ -467,7 +467,7 @@ def plot_trace_pmu_miss_ratio_by_phase(trace_dir: Path) -> Path:
     phases = sorted(phase_data.keys())
     means = [float(np.mean(phase_data[p])) if phase_data[p] else 0 for p in phases]
     ax.bar(phases, means, color="#ff6b6b")
-    ax.set_title("PMU Cache Miss Ratio by Phase")
+    ax.set_title("PMU-like Cache Miss Ratio by Phase (hardware when available)")
     ax.set_ylabel("Miss Ratio")
     _save(fig, out)
     return out

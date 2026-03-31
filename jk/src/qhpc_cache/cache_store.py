@@ -16,10 +16,15 @@ class CacheAccessLog:
     key: str
     hit: bool
     engine_name: str = ""
+    lookup_time_ms: float = 0.0
     compute_time_ms: float = 0.0
+    pricing_compute_time_ms: float = 0.0
+    stage_elapsed_ms: float = 0.0
     feature_vector: str = ""
     policy_approved_reuse: Optional[bool] = None
     operation: str = "lookup"
+    row_semantics: str = ""
+    failure_reason: str = ""
 
 
 class SimpleCacheStore:
@@ -51,6 +56,7 @@ class SimpleCacheStore:
         hit: bool,
         engine_name: str,
         policy_approved_reuse: Optional[bool],
+        lookup_time_ms: float,
     ) -> None:
         self._lookup_count += 1
         self._key_access_counts[key] = self._key_access_counts.get(key, 0) + 1
@@ -67,9 +73,11 @@ class SimpleCacheStore:
                     key=key,
                     hit=hit,
                     engine_name=engine_name,
+                    lookup_time_ms=lookup_time_ms,
                     feature_vector=key[:200],
                     policy_approved_reuse=policy_approved_reuse,
                     operation="lookup",
+                    row_semantics="lookup_single_attempt",
                 )
             )
 
@@ -81,13 +89,16 @@ class SimpleCacheStore:
         policy_approved_reuse: Optional[bool] = None,
     ) -> Tuple[bool, Any]:
         """Single-lookup cache API returning ``(hit, value_or_none)``."""
+        lookup_start = time.perf_counter()
         key = self.make_key(features)
         hit = key in self._store
+        lookup_time_ms = (time.perf_counter() - lookup_start) * 1000.0
         self._record_lookup(
             key=key,
             hit=hit,
             engine_name=engine_name,
             policy_approved_reuse=policy_approved_reuse,
+            lookup_time_ms=lookup_time_ms,
         )
         if hit:
             return True, self._store[key]
@@ -114,6 +125,10 @@ class SimpleCacheStore:
         value: Any,
         engine_name: str = "",
         compute_time_ms: float = 0.0,
+        pricing_compute_time_ms: Optional[float] = None,
+        stage_elapsed_ms: float = 0.0,
+        row_semantics: str = "put_single_compute_result",
+        failure_reason: str = "",
     ) -> None:
         key = self.make_key(features)
         existed = key in self._store
@@ -121,6 +136,11 @@ class SimpleCacheStore:
         if existed:
             self._overwrite_count += 1
         self._store[key] = value
+        resolved_pricing_compute_ms = (
+            float(pricing_compute_time_ms)
+            if pricing_compute_time_ms is not None
+            else float(compute_time_ms)
+        )
         if self._logging:
             self._access_log.append(
                 CacheAccessLog(
@@ -128,9 +148,13 @@ class SimpleCacheStore:
                     key=key,
                     hit=False,
                     engine_name=engine_name,
-                    compute_time_ms=compute_time_ms,
+                    compute_time_ms=resolved_pricing_compute_ms,
+                    pricing_compute_time_ms=resolved_pricing_compute_ms,
+                    stage_elapsed_ms=float(stage_elapsed_ms),
                     feature_vector=key[:200],
                     operation="put",
+                    row_semantics=row_semantics,
+                    failure_reason=failure_reason,
                 )
             )
 
@@ -184,8 +208,13 @@ class SimpleCacheStore:
                     "operation",
                     "hit",
                     "engine_name",
+                    "lookup_time_ms",
                     "compute_time_ms",
+                    "pricing_compute_time_ms",
+                    "stage_elapsed_ms",
                     "policy_approved_reuse",
+                    "row_semantics",
+                    "failure_reason",
                 ]
             )
             for entry in self._access_log:
@@ -197,8 +226,13 @@ class SimpleCacheStore:
                         entry.operation,
                         entry.hit,
                         entry.engine_name,
+                        entry.lookup_time_ms,
                         entry.compute_time_ms,
+                        entry.pricing_compute_time_ms,
+                        entry.stage_elapsed_ms,
                         entry.policy_approved_reuse,
+                        entry.row_semantics,
+                        entry.failure_reason,
                     ]
                 )
         return path

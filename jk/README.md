@@ -167,6 +167,23 @@ manifest = run_local_research_sweep(
 
 Tier definitions and ownership now live in `docs/long_run_local_research.md`.
 
+## Repeated-workload study (reuse-rich local evidence)
+
+Use the canonical repeated-workload phase when you want deliberate reuse-rich local
+cache evidence (Lane A stable headline evidence, Lane B stress/anomaly visibility):
+
+```bash
+PYTHONPATH=src python3 run_repeated_workload_study.py --lane both --scale-label standard
+```
+
+Backward-compatible CLI alias is available for operator scripts:
+
+```bash
+PYTHONPATH=src python3 run_repeated_workload_study.py --lane lane_a --include-stress-lane
+```
+
+See `docs/repeated_workload_study.md`.
+
 ## Install and run
 
 From `jk/`:
@@ -189,6 +206,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 - `docs/similarity_cache_replay_experiment.md`
 - `docs/similarity_cache_future_steps.md`
 - `docs/long_run_local_research.md`
+- `docs/repeated_workload_study.md`
 
 ## Scope disclaimer
 

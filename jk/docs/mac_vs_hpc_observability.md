@@ -65,3 +65,26 @@ readiness only and do not indicate completed PMU/HPC/QHPC execution.
   - record deferred workloads explicitly,
   - mark them as HPC-targeted.
 - Do not treat Mac and HPC as equivalent environments.
+
+## Labeling requirement for PMU-like outputs
+
+When PMU/hardware counters are unavailable on local Mac paths:
+
+- keep PMU-like CSV/plot outputs for continuity,
+- label them as `proxy_or_unavailable` in manifests/summaries,
+- and avoid presenting them as direct hardware-counter evidence.
+
+## Backend provenance requirement
+
+Run manifests and QMC summaries should always state:
+
+- `requested_backend`
+- `executed_backend`
+- `execution_environment`
+- `execution_mode_intent`
+- `execution_mode_actual`
+- `slurm_job_manifest_path` (when applicable)
+- `hpc_ready`, `mpi_ready`, `gpu_ready`
+- `execution_deferred_to_hpc`
+
+This keeps local-vs-HPC boundaries explicit in downstream reporting.

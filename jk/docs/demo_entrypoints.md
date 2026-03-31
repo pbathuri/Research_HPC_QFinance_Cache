@@ -194,6 +194,52 @@ PYTHONPATH=src python3 run_data_ingestion_event_book_demo.py
 PYTHONPATH=src python3 run_full_research_pipeline.py --budget=30
 ```
 
+## Canonical repeated-workload cache study (new)
+
+Purpose: strengthen local reuse-rich cache evidence beyond mostly-unique full-pipeline streams.
+
+```bash
+PYTHONPATH=src python3 run_repeated_workload_study.py --lane both --scale-label standard
+```
+
+See `docs/repeated_workload_study.md` for workload families, lane policy, outlier handling, and outputs.
+
+## BigRed200 Slurm-first artifact generation (new)
+
+Generate submission artifacts without pretending to execute HPC locally:
+
+```bash
+PYTHONPATH=src python3 run_full_research_pipeline.py \
+  --mode experiment_batch \
+  --requested-backend bigred200_mpi_batch \
+  --defer-execution-to-hpc \
+  --slurm-job-name qhpc_qmc_mpi \
+  --slurm-walltime 02:00:00 \
+  --slurm-partition general \
+  --slurm-nodes 2 \
+  --slurm-ntasks 64 \
+  --slurm-cpus-per-task 1 \
+  --slurm-mem 128G
+```
+
+See:
+
+- `docs/bigred200_execution_plan.md`
+- `docs/bigred200_operator_guide.md`
+- `docs/cuda_porting_candidates.md`
+
+Inspect latest run deterministically (mtime-based resolver):
+
+```bash
+PYTHONPATH=src python3 run_full_research_pipeline.py --latest-only-summary --output-root outputs
+```
+
+CLI help now prints usage and exits without running the pipeline:
+
+```bash
+PYTHONPATH=src python3 run_full_research_pipeline.py --help
+```
+
 ## Visualization (matplotlib / seaborn)
 
 | Script | Purpose |

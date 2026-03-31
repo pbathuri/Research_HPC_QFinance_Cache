@@ -68,6 +68,24 @@ class QMCSimulationConfig:
     pmu_collect_cache_misses: bool = True
     pmu_collect_branches: bool = False
     pmu_collect_page_faults: bool = False
+    # backend / HPC intent
+    requested_backend: str = "cpu_local"
+    execution_mode_intent: str = ""
+    execution_deferred_to_hpc: bool = False
+    hpc_submission_subdir: str = "hpc_submission"
+    hpc_run_command: str = ""
+    slurm_job_name: str = "qhpc_qmc"
+    slurm_walltime: str = "01:00:00"
+    slurm_partition: str = "general"
+    slurm_nodes: int = 1
+    slurm_ntasks: int = 1
+    slurm_cpus_per_task: int = 1
+    slurm_mem: str = "16G"
+    slurm_output_log: str = "slurm_%j.out"
+    slurm_error_log: str = "slurm_%j.err"
+    slurm_account: str = ""
+    slurm_constraint: str = ""
+    slurm_qos: str = ""
 
 
 _DEFAULT_QMC_OUTPUT_DIR = Path("outputs/qmc_simulation")
@@ -151,6 +169,9 @@ class QMCSimulationCSVWriter:
                 "timestamp", "phase", "original_dims", "reduced_dims",
                 "pca_variance_explained", "top_features", "cache_key_collisions",
                 "effective_cache_utilization",
+                "condensation_status", "condensation_reason",
+                "input_row_count", "input_feature_dim",
+                "output_row_count", "output_feature_dim",
             ],
         }
 
@@ -271,6 +292,7 @@ _TRACE_EVENT_COLS = [
     "pmu_available", "pmu_backend", "pmu_cycles", "pmu_instructions",
     "pmu_cache_references", "pmu_cache_misses", "pmu_task_clock_ms",
     "pmu_page_faults", "pmu_context_switches", "pmu_error",
+    "pmu_measurement_kind",
     "notes",
 ]
 
@@ -320,7 +342,7 @@ _TRACE_ENGINE_SUMMARY_COLS = [
     "wall_clock_ms_total", "wall_clock_ms_mean", "price_nan_count",
     "pmu_supported", "pmu_cycles_total", "pmu_instructions_total",
     "pmu_cache_refs_total", "pmu_cache_misses_total",
-    "pmu_miss_ratio", "pmu_ipc", "notes",
+    "pmu_miss_ratio", "pmu_ipc", "pmu_measurement_kind", "notes",
 ]
 
 
@@ -567,6 +589,11 @@ class TraceCollector:
             pmu_d["pmu_backend"] = self.pmu.backend_name
         if pmu_override:
             pmu_d.update(pmu_override)
+        pmu_measurement_kind = (
+            "hardware_counter_measured"
+            if bool(pmu_d.get("pmu_available"))
+            else "proxy_or_unavailable"
+        )
 
         row = {
             "event_id": eid,
@@ -639,6 +666,7 @@ class TraceCollector:
             "pattern_signature": sig,
             "phase_progress_ratio": round(phase_progress, 6),
             **pmu_d,
+            "pmu_measurement_kind": pmu_measurement_kind,
             "notes": notes,
         }
 
@@ -726,6 +754,14 @@ class TraceCollector:
             pmu_cref = sum(float(e.get("pmu_cache_references", 0)) for e in evts)
             pmu_cmis = sum(float(e.get("pmu_cache_misses", 0)) for e in evts)
             pmu_ok = any(e.get("pmu_available") for e in evts)
+            pmu_measurement_kind = (
+                "hardware_counter_measured" if pmu_ok else "proxy_or_unavailable"
+            )
+            pmu_note = (
+                ""
+                if pmu_ok
+                else "pmu-like fields are proxy/unavailable on this run"
+            )
 
             row = {
                 "engine": eng,
@@ -746,7 +782,8 @@ class TraceCollector:
                 "pmu_cache_misses_total": round(pmu_cmis, 0),
                 "pmu_miss_ratio": round(pmu_cmis / pmu_cref, 6) if pmu_cref > 0 else 0,
                 "pmu_ipc": round(pmu_ins / pmu_cyc, 6) if pmu_cyc > 0 else 0,
-                "notes": "",
+                "pmu_measurement_kind": pmu_measurement_kind,
+                "notes": pmu_note,
             }
             self._append_csv("engine_sum", row, _TRACE_ENGINE_SUMMARY_COLS)
 
@@ -803,7 +840,14 @@ def run_qmc_simulation(
     Returns a summary dict with phase results and output paths.
     """
     from qhpc_cache.cache_store import SimpleCacheStore
+    from qhpc_cache.data_models import BackendExecutionProvenance
     from qhpc_cache.feature_condenser import FeatureCondenser
+    from qhpc_cache.backends import (
+        create_backend,
+        default_mode_intent_for_backend,
+        normalize_backend_name,
+    )
+    from qhpc_cache.output_paths import ensure_hpc_submission_dir
 
     cfg = config or QMCSimulationConfig()
 
@@ -816,15 +860,149 @@ def run_qmc_simulation(
         cfg.output_dir = str((run_root / "qmc_simulation").resolve())
         output_auto_isolated = True
 
-    budget = SimulationBudget(cfg.budget_minutes * 60)
     out_dir = Path(cfg.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     csv_writer = QMCSimulationCSVWriter(out_dir)
+    run_root = out_dir.parent
+    run_id = f"qmc_{int(time.time())}"
+
+    requested_backend_raw = str(cfg.requested_backend or "cpu_local")
+    requested_backend_resolved = normalize_backend_name(requested_backend_raw)
+    requested_mode_intent = (
+        str(cfg.execution_mode_intent).strip()
+        if str(cfg.execution_mode_intent).strip()
+        else default_mode_intent_for_backend(requested_backend_raw)
+    )
+    selected_backend = create_backend(requested_backend_raw)
+    selected_cap = selected_backend.capabilities()
+    execution_deferred_to_hpc = bool(cfg.execution_deferred_to_hpc) or (requested_backend_resolved != "cpu_local")
+    slurm_job_manifest_path = ""
+
+    # Slurm-first integration readiness path: generate submission artifacts and exit honestly.
+    if execution_deferred_to_hpc:
+        cache = SimpleCacheStore(enable_logging=True)
+        cache.flush_access_log_csv(out_dir / "cache_access_log.csv")
+        submission_dir = ensure_hpc_submission_dir(run_root, cfg.hpc_submission_subdir)
+        slurm_backend = create_backend("slurm_bigred200")
+        run_command = (
+            str(cfg.hpc_run_command).strip()
+            if str(cfg.hpc_run_command).strip()
+            else (
+                "python3 run_full_research_pipeline.py "
+                f"--mode experiment_batch --budget {float(cfg.budget_minutes):g} "
+                f"--requested-backend {requested_backend_raw} --defer-execution-to-hpc"
+            )
+        )
+        slurm_plan = slurm_backend.build_plan(
+            "qmc_simulation",
+            {
+                "requested_backend": requested_backend_raw,
+                "execution_mode_intent": requested_mode_intent,
+                "num_paths": int(max(cfg.convergence_path_counts) if cfg.convergence_path_counts else 10000),
+                "slurm_job_name": cfg.slurm_job_name or "qhpc_qmc",
+                "slurm_walltime": cfg.slurm_walltime,
+                "slurm_partition": cfg.slurm_partition,
+                "slurm_nodes": int(cfg.slurm_nodes),
+                "slurm_ntasks": int(cfg.slurm_ntasks),
+                "slurm_cpus_per_task": int(cfg.slurm_cpus_per_task),
+                "slurm_mem": cfg.slurm_mem,
+                "slurm_output_log": cfg.slurm_output_log,
+                "slurm_error_log": cfg.slurm_error_log,
+                "slurm_account": cfg.slurm_account,
+                "slurm_constraint": cfg.slurm_constraint,
+                "slurm_qos": cfg.slurm_qos,
+                "artifact_dir": str(submission_dir),
+                "run_command": run_command,
+                "plan_id": f"qmc_{requested_mode_intent}_{int(time.time())}",
+            },
+            dry_run=True,
+        )
+        slurm_result = slurm_backend.execute(slurm_plan)
+        slurm_job_manifest_path = str(slurm_result.get("slurm_job_manifest_path", ""))
+
+        provenance = BackendExecutionProvenance(
+            requested_backend=requested_backend_raw,
+            executed_backend="none_deferred_to_hpc",
+            execution_environment="hpc",
+            execution_mode_intent=requested_mode_intent,
+            execution_mode_actual="deferred_to_hpc",
+            slurm_job_manifest_path=slurm_job_manifest_path,
+            hpc_ready=bool(selected_cap.hpc_ready),
+            mpi_ready=bool(selected_cap.mpi_ready),
+            gpu_ready=bool(selected_cap.gpu_ready),
+            execution_deferred_to_hpc=True,
+            notes="No pricing executed locally; Slurm submission artifacts generated for BigRed200.",
+        )
+        summary = {
+            "run_id": run_id,
+            "total_elapsed_seconds": 0.0,
+            "budget_seconds": float(cfg.budget_minutes * 60.0),
+            "trace_full_mode": cfg.trace_full_mode,
+            "output_dir": str(out_dir.resolve()),
+            "output_auto_isolated_from_default": output_auto_isolated,
+            "max_pricings_total": cfg.max_pricings_total,
+            "total_pricings_phases_2_3": 0,
+            "pricing_cap_reached": False,
+            "engine_allowlist": list(cfg.engine_allowlist) if cfg.engine_allowlist else None,
+            "phases": [
+                {
+                    "phase": "hpc_deferred_planning",
+                    "elapsed": 0.0,
+                    "records": 0,
+                    "slurm_job_manifest_path": slurm_job_manifest_path,
+                    "sbatch_script_path": slurm_result.get("sbatch_script_path", ""),
+                    "workload_to_slurm_mapping_csv": slurm_result.get("workload_to_slurm_mapping_csv", ""),
+                    "backend_readiness_md": slurm_result.get("backend_readiness_md", ""),
+                }
+            ],
+            "cache_final": cache.stats(),
+            "feature_condensation": {
+                "condensation_status": "skipped",
+                "condensation_reason": "execution_deferred_to_hpc",
+                "input_row_count": 0,
+                "input_feature_dim": 0,
+                "output_row_count": 0,
+                "output_feature_dim": 0,
+            },
+            "engines_used": [],
+            "optional_capabilities": {"engine_pool": []},
+            "pmu_observability": {
+                "measurement_status": "deferred_to_hpc",
+                "pmu_enabled_in_config": bool(cfg.enable_pmu),
+                "pmu_supported_any_engine": False,
+                "note": "PMU collection deferred to BigRed200/x86 execution.",
+            },
+            "backend_execution": provenance.to_dict(),
+            "requested_backend": provenance.requested_backend,
+            "executed_backend": provenance.executed_backend,
+            "execution_environment": provenance.execution_environment,
+            "execution_mode_intent": provenance.execution_mode_intent,
+            "execution_mode_actual": provenance.execution_mode_actual,
+            "slurm_job_manifest_path": provenance.slurm_job_manifest_path,
+            "hpc_ready": provenance.hpc_ready,
+            "mpi_ready": provenance.mpi_ready,
+            "gpu_ready": provenance.gpu_ready,
+            "execution_deferred_to_hpc": provenance.execution_deferred_to_hpc,
+            "csv_files": {
+                "simulation_log": str(csv_writer.sim_log_path.resolve()),
+                "cache_patterns": str(csv_writer.cache_pattern_path.resolve()),
+                "feature_condensation": str(csv_writer.feature_path.resolve()),
+                "cache_access_log": str((out_dir / "cache_access_log.csv").resolve()),
+                "run_summary_json": str((out_dir / "qmc_run_summary.json").resolve()),
+                "gan_synthetic_data": str((out_dir / "gan_synthetic_data.parquet").resolve()),
+            },
+        }
+        summary_path = out_dir / "qmc_run_summary.json"
+        import json
+
+        summary_path.write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
+        return summary
+
+    budget = SimulationBudget(cfg.budget_minutes * 60)
     rng = np.random.default_rng(cfg.seed)
 
     cache = SimpleCacheStore(enable_logging=True)
     condenser = FeatureCondenser(n_components=3)
-    run_id = f"qmc_{int(time.time())}"
     hit_history: List[bool] = []
     all_features: List[np.ndarray] = []
     phase_results: List[SimulationPhaseResult] = []
@@ -961,7 +1139,9 @@ def run_qmc_simulation(
 
                 if not engine_failed and math.isfinite(price) and math.isfinite(std_err):
                     cache.put(features, {"price": price, "std_error": std_err},
-                              engine_name=engine_name, compute_time_ms=wall_ms)
+                              engine_name=engine_name, compute_time_ms=wall_ms,
+                              stage_elapsed_ms=(time.perf_counter() - p2_start) * 1000.0,
+                              row_semantics="put_single_compute_result")
 
             hit_history.append(cache_hit)
             sweep_count += 1
@@ -1171,7 +1351,9 @@ def run_qmc_simulation(
 
                     if not engine_failed and math.isfinite(price) and math.isfinite(std_err):
                         cache.put(features, {"price": price, "std_error": std_err},
-                                  engine_name=engine_name, compute_time_ms=wall_ms)
+                                  engine_name=engine_name, compute_time_ms=wall_ms,
+                                  stage_elapsed_ms=(time.perf_counter() - p3_start) * 1000.0,
+                                  row_semantics="put_single_compute_result")
 
                 hit_history.append(cache_hit)
                 convergence_count += 1
@@ -1271,26 +1453,79 @@ def run_qmc_simulation(
     _report("Phase 4: Feature condensation analysis")
     p4_start = time.perf_counter()
 
+    input_row_count = len(all_features)
+    input_feature_dim = int(len(all_features[0])) if all_features else 0
+    feature_condensation_summary: Dict[str, Any] = {
+        "condensation_status": "skipped",
+        "condensation_reason": "insufficient_input_rows",
+        "input_row_count": int(input_row_count),
+        "input_feature_dim": int(input_feature_dim),
+        "output_row_count": 0,
+        "output_feature_dim": 0,
+    }
+
     if len(all_features) > 5:
-        feature_matrix = np.array(all_features)
-        condenser.fit(feature_matrix, feature_names=[
-                      "S0", "K", "r", "sigma", "T"])
+        try:
+            feature_matrix = np.array(all_features)
+            condenser.fit(feature_matrix, feature_names=[
+                          "S0", "K", "r", "sigma", "T"])
 
-        for i, fvec in enumerate(all_features):
-            orig_key = f"orig_{i}"
-            cond_key = condenser.condensed_cache_key(fvec)
-            condenser.track_key(orig_key, cond_key)
+            for i, fvec in enumerate(all_features):
+                orig_key = f"orig_{i}"
+                cond_key = condenser.condensed_cache_key(fvec)
+                condenser.track_key(orig_key, cond_key)
 
-        snap = condenser.record_snapshot("final")
+            snap = condenser.record_snapshot("final")
+            feature_condensation_summary = {
+                "condensation_status": "executed",
+                "condensation_reason": "",
+                "input_row_count": int(feature_matrix.shape[0]),
+                "input_feature_dim": int(feature_matrix.shape[1]),
+                "output_row_count": int(feature_matrix.shape[0]),
+                "output_feature_dim": int(snap.reduced_dims),
+            }
+            csv_writer.log_feature_condensation({
+                "timestamp": time.time(),
+                "phase": "final",
+                "original_dims": snap.original_dims,
+                "reduced_dims": snap.reduced_dims,
+                "pca_variance_explained": round(snap.variance_explained, 4),
+                "top_features": ",".join(snap.top_features),
+                "cache_key_collisions": snap.cache_key_collisions,
+                "effective_cache_utilization": round(snap.effective_utilization, 4),
+                **feature_condensation_summary,
+            })
+        except Exception as exc:
+            feature_condensation_summary = {
+                "condensation_status": "failed",
+                "condensation_reason": f"{type(exc).__name__}: {exc}",
+                "input_row_count": int(input_row_count),
+                "input_feature_dim": int(input_feature_dim),
+                "output_row_count": 0,
+                "output_feature_dim": 0,
+            }
+            csv_writer.log_feature_condensation({
+                "timestamp": time.time(),
+                "phase": "final",
+                "original_dims": input_feature_dim,
+                "reduced_dims": 0,
+                "pca_variance_explained": 0.0,
+                "top_features": "",
+                "cache_key_collisions": 0,
+                "effective_cache_utilization": 0.0,
+                **feature_condensation_summary,
+            })
+    else:
         csv_writer.log_feature_condensation({
             "timestamp": time.time(),
             "phase": "final",
-            "original_dims": snap.original_dims,
-            "reduced_dims": snap.reduced_dims,
-            "pca_variance_explained": round(snap.variance_explained, 4),
-            "top_features": ",".join(snap.top_features),
-            "cache_key_collisions": snap.cache_key_collisions,
-            "effective_cache_utilization": round(snap.effective_utilization, 4),
+            "original_dims": input_feature_dim,
+            "reduced_dims": 0,
+            "pca_variance_explained": 0.0,
+            "top_features": "",
+            "cache_key_collisions": 0,
+            "effective_cache_utilization": 0.0,
+            **feature_condensation_summary,
         })
 
     cache.flush_access_log_csv(out_dir / "cache_access_log.csv")
@@ -1299,6 +1534,7 @@ def run_qmc_simulation(
         "analysis",
         time.perf_counter() - p4_start,
         len(all_features),
+        {"feature_condensation": feature_condensation_summary},
     ))
 
     total_elapsed = budget.elapsed
@@ -1309,6 +1545,30 @@ def run_qmc_simulation(
         _report("Generating trace outputs and plots...")
         trace.flush_and_plot()
         _report(f"Trace: {trace.event_count} events emitted")
+
+    pmu_supported_any_engine = bool(
+        trace and any(bool(evt.get("pmu_available")) for evt in trace._events)
+    )
+    pmu_measurement_status = (
+        "hardware_counter_measured"
+        if pmu_supported_any_engine
+        else "proxy_or_unavailable"
+    )
+    optional_capabilities = _runtime_capability_snapshot(engines)
+
+    provenance = BackendExecutionProvenance(
+        requested_backend=requested_backend_raw,
+        executed_backend="cpu_local",
+        execution_environment="local",
+        execution_mode_intent=requested_mode_intent,
+        execution_mode_actual="cpu_single_node",
+        slurm_job_manifest_path=slurm_job_manifest_path,
+        hpc_ready=bool(selected_cap.hpc_ready),
+        mpi_ready=bool(selected_cap.mpi_ready),
+        gpu_ready=bool(selected_cap.gpu_ready),
+        execution_deferred_to_hpc=False,
+        notes="Executed locally on CPU.",
+    )
 
     summary = {
         "run_id": run_id,
@@ -1331,7 +1591,30 @@ def run_qmc_simulation(
             for p in phase_results
         ],
         "cache_final": cache.stats(),
+        "feature_condensation": feature_condensation_summary,
         "engines_used": list(engines.keys()),
+        "optional_capabilities": optional_capabilities,
+        "backend_execution": provenance.to_dict(),
+        "requested_backend": provenance.requested_backend,
+        "executed_backend": provenance.executed_backend,
+        "execution_environment": provenance.execution_environment,
+        "execution_mode_intent": provenance.execution_mode_intent,
+        "execution_mode_actual": provenance.execution_mode_actual,
+        "slurm_job_manifest_path": provenance.slurm_job_manifest_path,
+        "hpc_ready": provenance.hpc_ready,
+        "mpi_ready": provenance.mpi_ready,
+        "gpu_ready": provenance.gpu_ready,
+        "execution_deferred_to_hpc": provenance.execution_deferred_to_hpc,
+        "pmu_observability": {
+            "measurement_status": pmu_measurement_status,
+            "pmu_enabled_in_config": bool(cfg.enable_pmu),
+            "pmu_supported_any_engine": pmu_supported_any_engine,
+            "note": (
+                "PMU-like outputs are proxy/derived unless hardware counter support is reported."
+                if not pmu_supported_any_engine
+                else "At least one engine reported hardware-counter PMU support."
+            ),
+        },
         "csv_files": {
             "simulation_log": str(csv_writer.sim_log_path.resolve()),
             "cache_patterns": str(csv_writer.cache_pattern_path.resolve()),
@@ -1360,6 +1643,49 @@ def run_qmc_simulation(
         summary, indent=2, default=str), encoding="utf-8")
 
     return summary
+
+
+def _runtime_capability_snapshot(engines: Dict[str, Any]) -> Dict[str, Any]:
+    """Capture optional dependency/runtime capability labels for summaries."""
+    caps: Dict[str, Any] = {
+        "engine_pool": sorted(list(engines.keys())),
+    }
+
+    try:
+        from qhpc_cache.gan_data_generator import FinancialGAN
+
+        gan = FinancialGAN()
+        caps["financial_gan"] = {
+            "available": bool(gan.available()),
+            "backend": gan.backend_name,
+        }
+    except Exception as exc:
+        caps["financial_gan"] = {
+            "available": False,
+            "backend": "error",
+            "reason": str(exc),
+        }
+
+    try:
+        from qhpc_cache.quantum_engines.pyqmc_engine import PyQMCEngine
+
+        pyqmc_available = bool(PyQMCEngine.available())
+        caps["pyqmc_engine"] = {
+            "available": pyqmc_available,
+            "included_in_engine_pool": "pyqmc_vmc" in engines,
+            "status_label": (
+                "optional_available" if pyqmc_available else "optional_unavailable"
+            ),
+        }
+    except Exception as exc:
+        caps["pyqmc_engine"] = {
+            "available": False,
+            "included_in_engine_pool": False,
+            "status_label": "optional_unavailable",
+            "reason": str(exc),
+        }
+
+    return caps
 
 
 def _load_engines() -> Dict[str, Any]:

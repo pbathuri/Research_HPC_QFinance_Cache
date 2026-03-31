@@ -272,3 +272,35 @@ class DatasetRegistryEntry:
             wrds_source_table=str(row.get("wrds_source_table") or ""),
             wrds_dataset_role=str(row.get("wrds_dataset_role") or ""),
         )
+
+
+@dataclass
+class BackendExecutionProvenance:
+    """Requested vs executed backend metadata for run manifests/summaries."""
+
+    requested_backend: str = "cpu_local"
+    executed_backend: str = "cpu_local"
+    execution_environment: str = "local"
+    execution_mode_intent: str = "cpu_single_node"
+    execution_mode_actual: str = "cpu_single_node"
+    slurm_job_manifest_path: str = ""
+    hpc_ready: bool = False
+    mpi_ready: bool = False
+    gpu_ready: bool = False
+    execution_deferred_to_hpc: bool = False
+    notes: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "requested_backend": str(self.requested_backend),
+            "executed_backend": str(self.executed_backend),
+            "execution_environment": str(self.execution_environment),
+            "execution_mode_intent": str(self.execution_mode_intent),
+            "execution_mode_actual": str(self.execution_mode_actual),
+            "slurm_job_manifest_path": str(self.slurm_job_manifest_path),
+            "hpc_ready": bool(self.hpc_ready),
+            "mpi_ready": bool(self.mpi_ready),
+            "gpu_ready": bool(self.gpu_ready),
+            "execution_deferred_to_hpc": bool(self.execution_deferred_to_hpc),
+            "notes": str(self.notes),
+        }

@@ -113,6 +113,29 @@ class LiveDashboard:
 
         if feature_rows:
             last = feature_rows[-1]
+            cond_status = str(last.get("condensation_status", "")).strip().lower()
+            if cond_status and cond_status != "executed":
+                reason = str(last.get("condensation_reason", "")).strip()
+                ax.text(
+                    0.5,
+                    0.6,
+                    f"Condensation status: {cond_status}",
+                    transform=ax.transAxes,
+                    ha="center",
+                    va="center",
+                    fontsize=10,
+                )
+                ax.text(
+                    0.5,
+                    0.4,
+                    reason if reason else "(no reason provided)",
+                    transform=ax.transAxes,
+                    ha="center",
+                    va="center",
+                    fontsize=8,
+                    color="gray",
+                )
+                return
             orig = int(_safe_float(last.get("original_dims", "5")))
             reduced = int(_safe_float(last.get("reduced_dims", "3")))
             var_exp = _safe_float(last.get("pca_variance_explained", "0"))

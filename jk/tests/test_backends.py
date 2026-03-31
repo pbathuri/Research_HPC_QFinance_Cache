@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -22,6 +23,7 @@ class TestCpuLocal(unittest.TestCase):
         cap = b.capabilities()
         self.assertTrue(cap.can_execute)
         self.assertEqual(cap.name, "cpu_local")
+        self.assertEqual(cap.execution_environment, "local")
         self.assertGreater(cap.max_parallel_paths, 0)
 
     def test_validate(self) -> None:
@@ -76,16 +78,34 @@ class TestMpiPlaceholder(unittest.TestCase):
 class TestSlurmBigRed200(unittest.TestCase):
     def test_capabilities(self) -> None:
         cap = SlurmBigRed200Backend().capabilities()
-        self.assertFalse(cap.can_execute)
+        self.assertTrue(cap.can_execute)
         self.assertTrue(cap.supports_batch_scheduler)
+        self.assertTrue(cap.hpc_ready)
 
     def test_template_generation(self) -> None:
         b = SlurmBigRed200Backend()
-        plan = b.build_plan("monte_carlo", {"num_paths": 1_000_000, "nodes": 4})
-        result = b.execute(plan)
-        self.assertEqual(result["status"], "template_generated")
-        self.assertIn("SBATCH", result["sbatch_script"])
-        self.assertIn("qhpc", result["sbatch_script"])
+        with tempfile.TemporaryDirectory() as td:
+            plan = b.build_plan(
+                "monte_carlo",
+                {
+                    "num_paths": 1_000_000,
+                    "requested_backend": "bigred200_mpi_batch",
+                    "execution_mode_intent": "mpi_batch_slurm",
+                    "slurm_nodes": 2,
+                    "slurm_ntasks": 64,
+                    "slurm_cpus_per_task": 1,
+                    "artifact_dir": td,
+                    "run_command": "python3 run_full_research_pipeline.py --mode experiment_batch --defer-execution-to-hpc",
+                },
+            )
+            result = b.execute(plan)
+            self.assertEqual(result["status"], "template_generated")
+            self.assertIn("SBATCH", result["sbatch_script"])
+            self.assertIn("srun", result["sbatch_script"])
+            self.assertTrue(Path(result["sbatch_script_path"]).exists())
+            self.assertTrue(Path(result["slurm_job_manifest_path"]).exists())
+            self.assertTrue(Path(result["workload_to_slurm_mapping_csv"]).exists())
+            self.assertTrue(Path(result["backend_readiness_md"]).exists())
 
 
 if __name__ == "__main__":

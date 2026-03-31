@@ -18,11 +18,15 @@ class TestWrdsQueries(unittest.TestCase):
         self.assertEqual(wq.CANONICAL_TAQ_CRSP_TCLINK[0], "wrdsapps_link_crsp_taq")
         self.assertEqual(wq.CANONICAL_TAQ_CRSP_TCLINK[1], "tclink")
 
-    def test_placeholder_synced(self):
-        from qhpc_cache import wrds_placeholder as wp
+    def test_roadmap_is_canonical_in_wrds_queries(self):
         from qhpc_cache import wrds_queries as wq
 
-        self.assertEqual(len(wp.WRDS_INTEGRATION_ROADMAP), len(wq.WRDS_INTEGRATION_ROADMAP))
+        roadmap = wq.WRDS_INTEGRATION_ROADMAP
+        self.assertGreater(len(roadmap), 0)
+        self.assertEqual(
+            sorted(slot.priority_rank for slot in roadmap),
+            list(range(1, len(roadmap) + 1)),
+        )
 
 
 class TestWorkloadMetricsRow(unittest.TestCase):

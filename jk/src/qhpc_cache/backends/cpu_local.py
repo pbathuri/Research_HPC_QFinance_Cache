@@ -18,7 +18,13 @@ class CpuLocalBackend(BaseBackend):
         cores = os.cpu_count() or 1
         return BackendCapabilities(
             name="cpu_local",
+            backend_kind="cpu_local",
+            execution_environment="local",
+            execution_mode_intent="cpu_single_node",
             can_execute=True,
+            hpc_ready=False,
+            mpi_ready=False,
+            gpu_ready=False,
             max_parallel_paths=cores,
             notes=f"{cores} logical cores available",
         )
@@ -35,6 +41,10 @@ class CpuLocalBackend(BaseBackend):
             plan_id=f"cpu_{param_hash}",
             backend_name="cpu_local",
             task_type=task_type,
+            requested_backend="cpu_local",
+            execution_environment_intent="local",
+            execution_mode_intent="cpu_single_node",
+            execution_mode_actual="cpu_single_node",
             parameters=params,
             estimated_runtime_seconds=round(est_time, 3),
             estimated_memory_bytes=est_mem,

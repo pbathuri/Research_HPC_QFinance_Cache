@@ -162,14 +162,24 @@ class ResearchOrchestrator:
 
 def agent_environment_check(state: PipelineState) -> PipelineState:
     """Validate local environment and record capabilities."""
+    from qhpc_cache.backends import create_backend
     from qhpc_cache.backends.cpu_local import CpuLocalBackend
     from qhpc_cache.backends.cuda_placeholder import CudaPlaceholderBackend
+    from qhpc_cache.backends.mpi_placeholder import MpiPlaceholderBackend
+    from qhpc_cache.backends.slurm_bigred200 import SlurmBigRed200Backend
     from qhpc_cache.taq_kdb_adapter import kdb_backend_ready, default_kdb_taq_repo
     from qhpc_cache.data_sources import DatabentoProvider
 
+    requested_backend = str(state.config.get("requested_backend", "cpu_local"))
+    selected = create_backend(requested_backend)
+    selected_cap = selected.capabilities()
     caps = {
         "cpu_local": CpuLocalBackend().capabilities().__dict__,
         "cuda": CudaPlaceholderBackend().capabilities().__dict__,
+        "mpi": MpiPlaceholderBackend().capabilities().__dict__,
+        "slurm_bigred200": SlurmBigRed200Backend().capabilities().__dict__,
+        "requested_backend": requested_backend,
+        "selected_backend_capabilities": selected_cap.__dict__,
         "databento_key": DatabentoProvider.api_key_present(),
         "kdb_ready": kdb_backend_ready()[0],
         "kdb_taq_path": str(default_kdb_taq_repo()),
@@ -253,6 +263,20 @@ def agent_cache_experiment(state: PipelineState) -> PipelineState:
         live_dashboard=state.config.get("qmc_live_dashboard", False),
         trace_full_mode=state.config.get("qmc_trace_full", False),
         enforce_budget=state.config.get("qmc_enforce_budget", True),
+        requested_backend=str(state.config.get("requested_backend", "cpu_local")),
+        execution_deferred_to_hpc=bool(state.config.get("execution_deferred_to_hpc", False)),
+        slurm_job_name=str(state.config.get("slurm_job_name", "qhpc_qmc")),
+        slurm_walltime=str(state.config.get("slurm_walltime", "01:00:00")),
+        slurm_partition=str(state.config.get("slurm_partition", "general")),
+        slurm_nodes=int(state.config.get("slurm_nodes", 1)),
+        slurm_ntasks=int(state.config.get("slurm_ntasks", 1)),
+        slurm_cpus_per_task=int(state.config.get("slurm_cpus_per_task", 1)),
+        slurm_mem=str(state.config.get("slurm_mem", "16G")),
+        slurm_output_log=str(state.config.get("slurm_output_log", "slurm_%j.out")),
+        slurm_error_log=str(state.config.get("slurm_error_log", "slurm_%j.err")),
+        slurm_account=str(state.config.get("slurm_account", "")),
+        slurm_constraint=str(state.config.get("slurm_constraint", "")),
+        slurm_qos=str(state.config.get("slurm_qos", "")),
     )
 
     summary = run_qmc_simulation(cfg)
@@ -410,7 +434,7 @@ def agent_reporting(state: PipelineState) -> PipelineState:
         for s, r in state.failed_stages.items():
             md_lines.append(f"- **{s}**: {r}")
     md_lines.append("\n## Next Steps")
-    md_lines.append("- CUDA / MPI / BigRed200 execution backends remain as scaffold templates")
+    md_lines.append("- Slurm-first BigRed200 submission artifact path is available; MPI/CUDA runtime remains future work")
     md_lines.append("- WRDS/CRSP institutional data access pending credentials")
     md_lines.append("- Full quantum circuit execution requires hardware backend")
     md_path = output_root / f"{state.run_id}_report.md"

@@ -292,6 +292,56 @@ This is planning-only and uses explicit status labels:
 `implemented now`, `ready for x86/HPC validation`, `ready for BigRed200 execution planning`,
 `conceptually mappable to QHPC later`, `deferred / speculative`.
 
+## 20. Deterministic latest-run inspection (mtime-based)
+
+Use the canonical resolver helper through the pipeline CLI:
+
+```bash
+PYTHONPATH=src python3 run_full_research_pipeline.py --latest-only-summary --output-root outputs
+```
+
+This writes:
+
+- `latest_run_forensics_summary.json`
+- `latest_run_forensics_summary.md`
+
+under the resolved latest run directory, selected by filesystem mtime (not lexical folder order).
+
+## 21. Repeated-workload cache study (reuse-rich local evidence)
+
+```bash
+PYTHONPATH=src python3 run_repeated_workload_study.py --lane both --scale-label standard
+```
+
+Use this when you need deliberate repeated-workload evidence. The full pipeline can remain
+mostly unique-key heavy and is not by itself a strong exact-reuse workload generator.
+
+## 22. BigRed200 Slurm-first deferred execution path
+
+Use this path to generate submission artifacts for cluster execution while keeping
+local results honest (no fake HPC execution):
+
+```bash
+PYTHONPATH=src python3 run_full_research_pipeline.py \
+  --mode experiment_batch \
+  --requested-backend bigred200_cpu_batch \
+  --defer-execution-to-hpc \
+  --slurm-job-name qhpc_qmc_cpu \
+  --slurm-walltime 01:30:00 \
+  --slurm-partition general \
+  --slurm-nodes 1 \
+  --slurm-ntasks 32 \
+  --slurm-cpus-per-task 1 \
+  --slurm-mem 64G
+```
+
+Artifacts land in run-scoped `hpc_submission/` with:
+
+- `.sbatch.sh`
+- `.slurm_job_manifest.json`
+- `.workload_to_slurm_mapping.csv`
+- `.backend_readiness.md`
+
 ## Non-spine (optional)
 
 | Item | Notes |

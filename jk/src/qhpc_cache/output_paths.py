@@ -44,3 +44,11 @@ def create_run_output_root(base: Path | str = "outputs") -> Path:
             return suffixed.resolve()
 
     raise RuntimeError(f"Could not create unique run directory under {base}")
+
+
+def ensure_hpc_submission_dir(run_root: Path | str, subdir: str = "hpc_submission") -> Path:
+    """Create and return run-scoped HPC submission artifact directory."""
+    root = Path(run_root)
+    out = root / str(subdir)
+    out.mkdir(parents=True, exist_ok=True)
+    return out.resolve()
