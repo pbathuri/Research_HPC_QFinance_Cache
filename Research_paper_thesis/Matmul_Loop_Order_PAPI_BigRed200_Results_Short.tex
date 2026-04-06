@@ -1,0 +1,100 @@
+% Compile: pdflatex Matmul_Loop_Order_PAPI_BigRed200_Results_Short.tex
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{amsmath}
+
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue}
+
+\title{Naive GEMM on Big Red 200: Loop Order, Layout, and L1 Misses\\[0.5em]
+\large Short Report}
+\author{Pradyot Bathuri \\ Indiana University}
+\date{April 2026}
+
+\begin{document}
+\maketitle
+
+\noindent\textbf{Artifacts:} \texttt{bigred200\_results/results.csv}, \texttt{mm\_papi.c}; cluster: \textbf{Big Red 200} (Slurm).
+
+\section*{Purpose and scope}
+
+This note summarizes a completed measurement campaign (proposal $\rightarrow$ executed experiments $\rightarrow$ CSV and plots $\rightarrow$ draft long-form write-up). We study \textbf{naive} single-precision $C \mathrel{+}= AB$ with \textbf{six} compile-time loop permutations $(ijk,\ldots,kji)$ and \textbf{two} layouts (\textbf{row-major} / \textbf{column-major}). PAPI records \textbf{L1 data misses} and elapsed time in the \textbf{multiply} region only; GFLOPS uses $2N^3$ operations for square $N\times N$ matrices.
+
+\section*{Method (compressed)}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Item} & \textbf{Setting} \\
+\midrule
+Kernel & Triple loop GEMM, \texttt{float}, square $M=N=K$ \\
+Variants & $2$ layouts $\times$ $6$ orders $\Rightarrow$ \textbf{12} binaries (one order $+$ layout per build) \\
+Instrumentation & PAPI high-level region around \textbf{multiply} (init excluded) \\
+Platform & IU \textbf{Big Red 200}, batch jobs via \textbf{Slurm} \\
+Sweep & $N$ from small values through \textbf{5000} (multiple points per decade) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent\textbf{Caveats (unchanged from full paper):} L1-only counters; naive code $\neq$ BLAS; at small $N$ the compiler may erase nominal source-level differences.
+
+\section*{Results with numbers}
+
+\paragraph{Small $N$ --- no separation yet.}
+At \textbf{$N=10$}, every order records \textbf{$\sim$22} L1D misses (both layouts). At \textbf{$N=100$}, \textbf{all six orders} share the \textbf{same} logged values: \textbf{17\,642} L1 misses, \textbf{2.7895 GFLOPS}, identical seconds---so loop order \textbf{cannot be distinguished} at this scale with these metrics.
+
+\paragraph{Large $N=5000$ --- strong separation.}
+Head-to-head pairs (same layout; orders that remain the practical comparison at this size):
+
+\begin{table}[h]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lcccccccc@{}}
+\toprule
+\textbf{Layout} & \textbf{Fast} & \textbf{GFLOPS} & \textbf{L1D misses} & \textbf{Time (s)} &
+\textbf{Slow} & \textbf{GFLOPS} & \textbf{L1D misses} & \textbf{Time (s)} \\
+\midrule
+Row-major    & \textbf{ikj} & \textbf{6.121} & \textbf{$1.189\times 10^{10}$} & \textbf{40.845} &
+kij & 4.449 & $1.576\times 10^{10}$ & 56.198 \\
+Col.-major & \textbf{jki} & \textbf{6.119} & \textbf{$1.189\times 10^{10}$} & \textbf{40.858} &
+kji & 4.482 & $1.577\times 10^{10}$ & 55.781 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent Rounded interpretation: the faster order runs \textbf{$\sim$38\%} higher GFLOPS and \textbf{$\sim$25\%} fewer L1D misses than the slower partner in each pair; wall time drops \textbf{$\sim$27--37\%} for the same arithmetic work. Row-major (\texttt{ikj} vs \texttt{kij}) and column-major (\texttt{jki} vs \texttt{kji}) show \textbf{nearly identical} GFLOPS and miss totals for the ``fast'' and ``slow'' roles---evidence that \textbf{layout and order must be analyzed jointly}, not as a single universal ``best'' nest.
+
+\paragraph{Mid-range behavior.}
+Plots and bar charts (e.g.\ \textbf{$N=500$} row-major) show \textbf{large spreads} across orders---four nests at high L1 counts versus \texttt{kij}/\texttt{kji} at much lower misses---consistent with inner-loop stride mattering once the working set no longer sits trivially in L1. GFLOPS vs.\ $N$ is \textbf{non-monotonic} (peaks and ``cliffs''), as expected for unblocked matmul crossing cache boundaries.
+
+\section*{Progress check}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Milestone} & \textbf{Status} \\
+\midrule
+Kernel $+$ PAPI $+$ layout/order matrix & \textbf{Done} \\
+Slurm runs on Big Red 200 $+$ \texttt{results.csv} & \textbf{Done} \\
+Figures (GFLOPS vs.\ $N$, L1 bars at selected $N$) & \textbf{Done} \\
+Long-form draft (\texttt{Matmul\_Loop\_Order\_PAPI\_BigRed200\_Results.md}) & \textbf{Done} \\
+Exact node CPU model, compiler line, Slurm excerpt in prose & \textbf{Todo} (reproducibility) \\
+Replicated runs (median / spread) & \textbf{Optional next} \\
+L2/LLC counters or roofline / tiled kernel & \textbf{Future extension} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent\textbf{Bottom line:} The project is \textbf{on track} for a results-driven HPC narrative: quantitative \textbf{large-$N$} effects are clear and internally consistent (misses $\leftrightarrow$ time $\leftrightarrow$ GFLOPS), and \textbf{small-$N$ degeneracy} is documented rather than hidden. Remaining work is \textbf{polish and optional strengthening} (repeats, extra counters, blocked baseline), not recovery from missing data.
+
+\section*{References (short)}
+PAPI (hardware counters); Williams et al.\ (roofline, for future work); Dongarra et al.\ (BLAS context). See full manuscript for complete list.
+
+\end{document}
