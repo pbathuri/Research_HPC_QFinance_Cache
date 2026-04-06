@@ -1,0 +1,29 @@
+README.md
+  7c27c79e983ed812 59,62-63,65,112
+bigred200_results/run_finance_kernels.sh
+  7c27c79e983ed812 45,59-67
+bigred200_results/garch_mle_papi.c
+  7c27c79e983ed812 16-17,114-121,126-130,133,148-152,162
+bigred200_results/mc_paths_papi.c
+  7c27c79e983ed812 6-7,9,19-20,142,145,147-148,152-156,159,170-173,183
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.6",
+  "base_commit_sha": "ed0c47ee56d3d20478478cdc34df0e385bdd26ed",
+  "prompts": {
+    "7c27c79e983ed812": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b47de250-9f85-4f1c-a562-d26e49cd54bd",
+        "model": "<synthetic>"
+      },
+      "human_author": "pbathuri",
+      "messages": [],
+      "total_additions": 59,
+      "total_deletions": 176,
+      "accepted_lines": 59,
+      "overriden_lines": 0
+    }
+  }
+}
