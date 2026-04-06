@@ -14,7 +14,13 @@
 
 CC      ?= gcc
 CFLAGS  := -O3 -march=native -Wall -Wextra
-LDFLAGS := -lpapi -lm
+LDFLAGS := -lm
+
+# Use pkg-config for PAPI paths (works on BigRed200)
+PAPI_CFLAGS := $(shell pkg-config --cflags papi 2>/dev/null)
+PAPI_LIBS   := $(shell pkg-config --libs papi 2>/dev/null || echo "-lpapi")
+CFLAGS  += $(PAPI_CFLAGS)
+LDFLAGS := $(PAPI_LIBS) $(LDFLAGS)
 
 # Directory for binaries
 BINDIR  := bin

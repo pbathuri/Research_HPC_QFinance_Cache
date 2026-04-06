@@ -3,10 +3,10 @@
  *
  * PAPI-instrumented correlated Monte Carlo path generation.
  *
- * Given a pre-computed Cholesky factor L of a d×d covariance matrix,
- * generates P correlated sample vectors  z = L · ε  where ε ~ N(0,I).
+ * Given a pre-computed Cholesky factor L of a d*d covariance matrix,
+ * generates P correlated sample vectors  z = L * eps  where eps ~ N(0,I).
  *
- * The kernel being timed is the matvec  z = L · ε  repeated P times.
+ * The kernel being timed is the matvec  z = L * eps  repeated P times.
  * Cholesky factorisation is done OUTSIDE the timed region.
  *
  * Compile-time:  -DROW_MAJOR  or  -DCOL_MAJOR
@@ -16,18 +16,16 @@
  * Output (stdout, one CSV line):
  *   layout,kernel,d,P,gflops,l1_miss,seconds
  *
- * Uses PAPI high-level API (proven on BigRed200).
+ * Uses PAPI low-level counters (PAPI_start_counters/PAPI_stop_counters)
+ * for direct in-memory L1 miss reads -- no JSON file parsing needed.
  */
 
 #include <assert.h>
-#include <dirent.h>
 #include <math.h>
 #include <papi.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <time.h>
-#include <unistd.h>
 
 /* ---- layout ---------------------------------------------------- */
 #if defined(ROW_MAJOR)
@@ -40,8 +38,7 @@
   #error "Define ROW_MAJOR or COL_MAJOR"
 #endif
 
-__attribute__((noipa))
-void do_not_optimize(float *_) { (void)_; }
+void __attribute__((noinline)) do_not_optimize(float *_) { (void)_; }
 static volatile float sink_f;
 
 /* ---- xorshift64 PRNG -------------------------------------------- */
@@ -121,33 +118,6 @@ static inline void tri_matvec(const float *L, const float *eps,
     }
 }
 
-/* ---- parse PAPI HL JSON output for L1_DCM ----------------------- */
-static long long parse_papi_l1(const char *outdir)
-{
-    long long val = -1;
-    DIR *dp = opendir(outdir);
-    if (!dp) return val;
-    struct dirent *ent;
-    char path[1024];
-    while ((ent = readdir(dp)) != NULL) {
-        if (strstr(ent->d_name, ".json") == NULL) continue;
-        snprintf(path, sizeof(path), "%s/%s", outdir, ent->d_name);
-        FILE *f = fopen(path, "r");
-        if (!f) continue;
-        char buf[4096];
-        while (fgets(buf, sizeof(buf), f)) {
-            char *p = strstr(buf, "PAPI_L1_DCM");
-            if (p) {
-                p = strchr(p, ':');
-                if (p) val = atoll(p + 1);
-            }
-        }
-        fclose(f);
-    }
-    closedir(dp);
-    return val;
-}
-
 /* ----------------------------------------------------------------- */
 int main(int argc, char **argv)
 {
@@ -169,22 +139,24 @@ int main(int argc, char **argv)
     cholesky_factor(L, A, d);
     free(A);
 
-    /* ---- PAPI HL setup ---- */
+    /* ---- PAPI setup: direct counter read ------------------------ */
     int ret = PAPI_library_init(PAPI_VER_CURRENT);
     if (ret != PAPI_VER_CURRENT)
-        fprintf(stderr, "PAPI init warning: %d\n", ret);
+        fprintf(stderr, "PAPI_library_init failed: %d\n", ret);
 
-    char papi_dir[256];
-    snprintf(papi_dir, sizeof(papi_dir), "papi_out_mc_%s_%d_%d_%d",
-             LAYOUT_STR, d, P, (int)getpid());
-    setenv("PAPI_OUTPUT_DIRECTORY", papi_dir, 1);
+    int events[1] = { PAPI_L1_DCM };
+    long long values[1] = { 0 };
 
     struct timespec t0, t1;
 
-    /* ---- timed region: P paths of triangular matvec ------------- */
-    PAPI_hl_region_begin("mc_paths");
+    ret = PAPI_start_counters(events, 1);
+    if (ret != PAPI_OK)
+        fprintf(stderr, "PAPI_start_counters failed: %s (code %d)\n",
+                PAPI_strerror(ret), ret);
+
     clock_gettime(CLOCK_MONOTONIC, &t0);
 
+    /* ---- timed region: P paths of triangular matvec ------------- */
     for (int p = 0; p < P; p++) {
         for (int i = 0; i < d; i++)
             eps[i] = randn();
@@ -194,7 +166,11 @@ int main(int argc, char **argv)
     }
 
     clock_gettime(CLOCK_MONOTONIC, &t1);
-    PAPI_hl_region_end("mc_paths");
+
+    ret = PAPI_stop_counters(values, 1);
+    if (ret != PAPI_OK)
+        fprintf(stderr, "PAPI_stop_counters failed: %s (code %d)\n",
+                PAPI_strerror(ret), ret);
 
     do_not_optimize(acc);
     sink_f = acc[0];
@@ -204,27 +180,10 @@ int main(int argc, char **argv)
     double flops  = (double)P * (double)d * ((double)d + 1.0) / 2.0 * 2.0;
     double gflops = (flops / seconds) * 1e-9;
 
-    PAPI_hl_stop();
-    long long l1_miss = parse_papi_l1(papi_dir);
+    long long l1_miss = values[0];
 
     printf("%s,mc_paths,%d,%d,%.15g,%lld,%.15g\n",
            LAYOUT_STR, d, P, gflops, l1_miss, seconds);
-
-    /* clean up */
-    {
-        DIR *dp = opendir(papi_dir);
-        if (dp) {
-            struct dirent *ent;
-            char path[1024];
-            while ((ent = readdir(dp)) != NULL) {
-                if (ent->d_name[0] == '.') continue;
-                snprintf(path, sizeof(path), "%s/%s", papi_dir, ent->d_name);
-                remove(path);
-            }
-            closedir(dp);
-            rmdir(papi_dir);
-        }
-    }
 
     free(acc);
     free(z);

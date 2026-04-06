@@ -13,19 +13,16 @@
  * Prints one CSV line to stdout:
  *   layout,algo,d,gflops,l1_miss,seconds
  *
- * Uses PAPI high-level API (same as mm_papi.c which is proven on BigRed200).
- * L1 miss count is extracted from PAPI_hl output via environment variables.
+ * Uses PAPI low-level counters (PAPI_start_counters/PAPI_stop_counters)
+ * for direct in-memory L1 miss reads — no JSON file parsing needed.
  */
 
 #include <assert.h>
-#include <dirent.h>
 #include <math.h>
 #include <papi.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <time.h>
-#include <unistd.h>
 
 /* ---- layout ---------------------------------------------------- */
 #if defined(ROW_MAJOR)
@@ -46,8 +43,7 @@
   #error "Define ALGO_BANACHIEWICZ or ALGO_CROUT"
 #endif
 
-__attribute__((noipa))
-void do_not_optimize(float *_) { (void)_; }
+void __attribute__((noinline)) do_not_optimize(float *_) { (void)_; }
 static volatile float sink_f;
 
 /* ---- build random SPD matrix: A = M M^T + d·I ------------------- */
@@ -110,33 +106,6 @@ static void cholesky(float *L, const float *A, int d)
 }
 #endif
 
-/* ---- parse PAPI HL JSON output for L1_DCM ----------------------- */
-static long long parse_papi_l1(const char *outdir)
-{
-    long long val = -1;
-    DIR *dp = opendir(outdir);
-    if (!dp) return val;
-    struct dirent *ent;
-    char path[1024];
-    while ((ent = readdir(dp)) != NULL) {
-        if (strstr(ent->d_name, ".json") == NULL) continue;
-        snprintf(path, sizeof(path), "%s/%s", outdir, ent->d_name);
-        FILE *f = fopen(path, "r");
-        if (!f) continue;
-        char buf[4096];
-        while (fgets(buf, sizeof(buf), f)) {
-            char *p = strstr(buf, "PAPI_L1_DCM");
-            if (p) {
-                p = strchr(p, ':');
-                if (p) val = atoll(p + 1);
-            }
-        }
-        fclose(f);
-    }
-    closedir(dp);
-    return val;
-}
-
 /* ----------------------------------------------------------------- */
 int main(int argc, char **argv)
 {
@@ -151,27 +120,31 @@ int main(int argc, char **argv)
 
     build_spd(A, d);
 
-    /* ---- PAPI high-level setup ---- */
+    /* ---- PAPI setup: direct counter read ------------------------ */
     int ret = PAPI_library_init(PAPI_VER_CURRENT);
     if (ret != PAPI_VER_CURRENT)
-        fprintf(stderr, "PAPI init warning: %d\n", ret);
+        fprintf(stderr, "PAPI_library_init failed: %d\n", ret);
 
-    /* Use a unique output dir per invocation */
-    char papi_dir[256];
-    snprintf(papi_dir, sizeof(papi_dir), "papi_out_%s_%s_%d_%d",
-             LAYOUT_STR, ALGO_STR, d, (int)getpid());
-    setenv("PAPI_OUTPUT_DIRECTORY", papi_dir, 1);
+    int events[1] = { PAPI_L1_DCM };
+    long long values[1] = { 0 };
 
     struct timespec t0, t1;
 
-    /* ---- timed region (PAPI HL wraps the same region) ---- */
-    PAPI_hl_region_begin("cholesky");
+    ret = PAPI_start_counters(events, 1);
+    if (ret != PAPI_OK)
+        fprintf(stderr, "PAPI_start_counters failed: %s (code %d)\n",
+                PAPI_strerror(ret), ret);
+
     clock_gettime(CLOCK_MONOTONIC, &t0);
 
     cholesky(L, A, d);
 
     clock_gettime(CLOCK_MONOTONIC, &t1);
-    PAPI_hl_region_end("cholesky");
+
+    ret = PAPI_stop_counters(values, 1);
+    if (ret != PAPI_OK)
+        fprintf(stderr, "PAPI_stop_counters failed: %s (code %d)\n",
+                PAPI_strerror(ret), ret);
 
     do_not_optimize(L);
     sink_f = L[0];
@@ -181,29 +154,10 @@ int main(int argc, char **argv)
     double flops   = (double)d * (double)d * (double)d / 3.0;
     double gflops  = (flops / seconds) * 1e-9;
 
-    /* Force PAPI to flush output */
-    PAPI_hl_stop();
-
-    long long l1_miss = parse_papi_l1(papi_dir);
+    long long l1_miss = values[0];
 
     printf("%s,%s,%d,%.15g,%lld,%.15g\n",
            LAYOUT_STR, ALGO_STR, d, gflops, l1_miss, seconds);
-
-    /* clean up papi output dir */
-    {
-        DIR *dp = opendir(papi_dir);
-        if (dp) {
-            struct dirent *ent;
-            char path[1024];
-            while ((ent = readdir(dp)) != NULL) {
-                if (ent->d_name[0] == '.') continue;
-                snprintf(path, sizeof(path), "%s/%s", papi_dir, ent->d_name);
-                remove(path);
-            }
-            closedir(dp);
-            rmdir(papi_dir);
-        }
-    }
 
     free(L);
     free(A);

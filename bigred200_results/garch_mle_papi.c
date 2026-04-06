@@ -13,21 +13,18 @@
  * Output (stdout, one CSV line):
  *   kernel,T,n_eval,gflops,l1_miss,seconds
  *
- * Uses PAPI high-level API (proven on BigRed200).
+ * Uses PAPI low-level counters (PAPI_start_counters/PAPI_stop_counters)
+ * for direct in-memory L1 miss reads -- no JSON file parsing needed.
  */
 
 #include <assert.h>
-#include <dirent.h>
 #include <math.h>
 #include <papi.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <time.h>
-#include <unistd.h>
 
-__attribute__((noipa))
-void do_not_optimize_d(double *_) { (void)_; }
+void __attribute__((noinline)) do_not_optimize_d(double *_) { (void)_; }
 static volatile double sink;
 
 /* ---- xorshift PRNG ---------------------------------------------- */
@@ -81,33 +78,6 @@ static double garch_loglik(const double *r, int T,
     return ll;
 }
 
-/* ---- parse PAPI HL JSON output for L1_DCM ----------------------- */
-static long long parse_papi_l1(const char *outdir)
-{
-    long long val = -1;
-    DIR *dp = opendir(outdir);
-    if (!dp) return val;
-    struct dirent *ent;
-    char path[1024];
-    while ((ent = readdir(dp)) != NULL) {
-        if (strstr(ent->d_name, ".json") == NULL) continue;
-        snprintf(path, sizeof(path), "%s/%s", outdir, ent->d_name);
-        FILE *f = fopen(path, "r");
-        if (!f) continue;
-        char buf[4096];
-        while (fgets(buf, sizeof(buf), f)) {
-            char *p = strstr(buf, "PAPI_L1_DCM");
-            if (p) {
-                p = strchr(p, ':');
-                if (p) val = atoll(p + 1);
-            }
-        }
-        fclose(f);
-    }
-    closedir(dp);
-    return val;
-}
-
 /* ----------------------------------------------------------------- */
 int main(int argc, char **argv)
 {
@@ -125,16 +95,6 @@ int main(int argc, char **argv)
 
     generate_returns(r, T, omega_true, alpha_true, beta_true);
 
-    /* ---- PAPI HL setup ---- */
-    int ret = PAPI_library_init(PAPI_VER_CURRENT);
-    if (ret != PAPI_VER_CURRENT)
-        fprintf(stderr, "PAPI init warning: %d\n", ret);
-
-    char papi_dir[256];
-    snprintf(papi_dir, sizeof(papi_dir), "papi_out_garch_%d_%d_%d",
-             T, n_eval, (int)getpid());
-    setenv("PAPI_OUTPUT_DIRECTORY", papi_dir, 1);
-
     /* pre-build parameter grid */
     int grid_side = (int)cbrt((double)n_eval);
     if (grid_side < 1) grid_side = 1;
@@ -151,14 +111,26 @@ int main(int argc, char **argv)
         betas[i]  = 0.85     + frac * 0.10;
     }
 
+    /* ---- PAPI setup: direct counter read ------------------------ */
+    int ret = PAPI_library_init(PAPI_VER_CURRENT);
+    if (ret != PAPI_VER_CURRENT)
+        fprintf(stderr, "PAPI_library_init failed: %d\n", ret);
+
+    int events[1] = { PAPI_L1_DCM };
+    long long values[1] = { 0 };
+
     double best_ll = -1e30;
     int actual_evals = 0;
     struct timespec t0, t1;
 
-    /* ---- timed region ---- */
-    PAPI_hl_region_begin("garch_mle");
+    ret = PAPI_start_counters(events, 1);
+    if (ret != PAPI_OK)
+        fprintf(stderr, "PAPI_start_counters failed: %s (code %d)\n",
+                PAPI_strerror(ret), ret);
+
     clock_gettime(CLOCK_MONOTONIC, &t0);
 
+    /* ---- timed region ---- */
     for (int io = 0; io < grid_side; io++)
       for (int ia = 0; ia < grid_side; ia++)
         for (int ib = 0; ib < grid_side; ib++) {
@@ -173,7 +145,11 @@ int main(int argc, char **argv)
         }
 
     clock_gettime(CLOCK_MONOTONIC, &t1);
-    PAPI_hl_region_end("garch_mle");
+
+    ret = PAPI_stop_counters(values, 1);
+    if (ret != PAPI_OK)
+        fprintf(stderr, "PAPI_stop_counters failed: %s (code %d)\n",
+                PAPI_strerror(ret), ret);
 
     do_not_optimize_d(&best_ll);
     sink = best_ll;
@@ -183,27 +159,10 @@ int main(int argc, char **argv)
     double flops   = 7.0 * (double)T * (double)actual_evals;
     double gflops  = (flops / seconds) * 1e-9;
 
-    PAPI_hl_stop();
-    long long l1_miss = parse_papi_l1(papi_dir);
+    long long l1_miss = values[0];
 
     printf("garch_mle,%d,%d,%.15g,%lld,%.15g\n",
            T, actual_evals, gflops, l1_miss, seconds);
-
-    /* clean up */
-    {
-        DIR *dp = opendir(papi_dir);
-        if (dp) {
-            struct dirent *ent;
-            char path[1024];
-            while ((ent = readdir(dp)) != NULL) {
-                if (ent->d_name[0] == '.') continue;
-                snprintf(path, sizeof(path), "%s/%s", papi_dir, ent->d_name);
-                remove(path);
-            }
-            closedir(dp);
-            rmdir(papi_dir);
-        }
-    }
 
     free(betas);
     free(alphas);

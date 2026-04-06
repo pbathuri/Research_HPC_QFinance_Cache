@@ -22,9 +22,13 @@ echo ""
 
 # ---- modules ----------------------------------------------------
 module purge 2>/dev/null || true
-module load papi 2>/dev/null || true
+module load papi 2>&1 || echo "WARNING: 'module load papi' failed"
+echo "Loaded modules:"
+module list 2>&1
+echo ""
 echo "CC:        $(gcc --version | head -1)"
 echo "PAPI:      $(papi_avail 2>/dev/null | head -3 | tail -1 || echo 'papi_avail not in PATH')"
+echo "pkg-config: $(pkg-config --cflags --libs papi 2>&1 || echo 'no pkg-config for papi')"
 echo ""
 
 # ---- working directory -------------------------------------------
@@ -32,13 +36,17 @@ cd "$SLURM_SUBMIT_DIR"
 echo "WORKDIR:   $(pwd)"
 echo ""
 
-# ---- PAPI high-level API configuration --------------------------
-export PAPI_EVENTS="PAPI_L1_DCM"
-
 # ---- rebuild with latest source ----------------------------------
 rm -rf bin
 make finance 2>&1
-echo "=== Build complete ==="
+BUILD_RC=$?
+echo "=== Build exit code: ${BUILD_RC} ==="
+if [ $BUILD_RC -ne 0 ]; then
+    echo "FATAL: make finance failed."
+    exit 1
+fi
+echo "Binaries built:"
+ls bin/
 echo ""
 
 BINDIR=bin
@@ -47,6 +55,17 @@ BINDIR=bin
 CHOL_CSV="results_cholesky.csv"
 MC_CSV="results_mcpaths.csv"
 GARCH_CSV="results_garch.csv"
+
+# ---- quick sanity test -------------------------------------------
+echo "=== Sanity test ==="
+TEST_OUT=$("${BINDIR}/cholesky_ROW_MAJOR_ALGO_BANACHIEWICZ" 100 2>&1)
+echo "Output: $TEST_OUT"
+L1_VAL=$(echo "$TEST_OUT" | head -1 | cut -d, -f5)
+echo "L1 miss value from test: $L1_VAL"
+if [ "$L1_VAL" = "0" ] || [ "$L1_VAL" = "-1" ]; then
+    echo "WARNING: L1 miss value is $L1_VAL -- PAPI counters may not be working"
+fi
+echo ""
 
 # ============================================================
 # 1. CHOLESKY DECOMPOSITION
@@ -117,7 +136,6 @@ echo "MC Paths:   $(tail -n +2 "$MC_CSV"   | wc -l) data points"
 echo "GARCH MLE:  $(tail -n +2 "$GARCH_CSV"| wc -l) data points"
 echo ""
 
-# Print a few lines so we can verify L1 miss values are non-zero
 echo "=== Spot-check L1 miss values ==="
 echo "Cholesky d=3000:"
 grep "3000" "$CHOL_CSV" | head -2
