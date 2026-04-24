@@ -1,7 +1,0 @@
-data/qhpc_data/
-outputs/
-__pycache__/
-*.pyc
-.pytest_cache/
-.venv/
-.env
